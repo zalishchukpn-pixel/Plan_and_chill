@@ -1,8 +1,8 @@
 from fastapi import FastAPI
-
-
 import json
 from datetime import datetime
+
+app = FastAPI()
 
 class Event:
     def __init__(self, name, priority, time_to_spend):
