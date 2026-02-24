@@ -5,7 +5,7 @@
 
 
 ### Структура проекту
-
+```
 plan-chill/
 ├── index.html           Сторінка входу (логін)
 ├── planner.html         Головна сторінка планувальника
@@ -16,7 +16,7 @@ plan-chill/
 │   └── utils.js         Спільна логіка, API, утиліти (ES модуль)
 ├── Backend.py           Python FastAPI бекенд
 └── README.md
-
+```
 
 
 
