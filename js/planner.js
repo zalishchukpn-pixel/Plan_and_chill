@@ -1,5 +1,5 @@
 import {
-  DAYS_OF_WEEK, CURRENT_MONTH,
+  DAYS_OF_WEEK,
   apiGetTasks, apiSaveDayTasks,
   getScheduleCache, saveScheduleCache,
   fetchSchedule, parseTime,
@@ -12,12 +12,22 @@ const userName = requireAuth();
 if (!userName) throw new Error('not auth');
 
 // ── State ─────────────────────────────────────────────────────────
-let viewMode    = localStorage.getItem('viewMode') || 'day';
-let selectedDay = parseInt(localStorage.getItem('selectedDay') || '1');
-let dayTasks    = {};       // loaded from DB
-let schedCache  = getScheduleCache();
-let formState   = null;
-let editTaskId  = null;
+let viewMode       = localStorage.getItem('viewMode') || 'day';
+let selectedDay    = parseInt(localStorage.getItem('selectedDay') || '1');
+let selectedMonth  = parseInt(localStorage.getItem('selectedMonth') || '2'); // 1=січень, 2=лютий, ..., 12=грудень
+let dayTasks       = {};       // loaded from DB
+let schedCache     = getScheduleCache();
+let formState      = null;
+let editTaskId     = null;
+
+// ── Month names (українською) ─────────────────────────────────────
+const MONTH_NAMES = [
+  '', 'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
+  'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'
+];
+
+// ── Days in each month (без урахування високосного року для простоти) ──
+const DAYS_IN_MONTH = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 // ── Load tasks from DB on start ───────────────────────────────────
 async function loadTasks() {
@@ -31,8 +41,15 @@ const EMPTY_FORM = () => ({
   start: '', end: '', duration: '60', priority: '5', recurrence: 'none'
 });
 
-function rawTasks(day)      { return dayTasks[day] || []; }
-function cachedSchedule(day){ return schedCache[day] || null; }
+function rawTasks(day, month) { 
+  const key = `${month}-${day}`;
+  return dayTasks[key] || []; 
+}
+
+function cachedSchedule(day, month) { 
+  const key = `${month}-${day}`;
+  return schedCache[key] || null; 
+}
 
 function sortQueue(tasks) {
   return [...tasks].sort((a, b) => {
@@ -43,11 +60,11 @@ function sortQueue(tasks) {
   });
 }
 
-async function saveAndClearCache(updated) {
+async function saveAndClearCache(updated, month, day) {
   dayTasks = updated;
-  // Save only the current day to DB
-  await apiSaveDayTasks(userName, selectedDay, updated[selectedDay] || []);
-  delete schedCache[selectedDay];
+  const key = `${month}-${day}`;
+  await apiSaveDayTasks(userName, day, month, updated[key] || []);
+  delete schedCache[key];
   saveScheduleCache(schedCache);
 }
 
@@ -65,18 +82,41 @@ function buildMain() {
 
 // ── MONTH VIEW ────────────────────────────────────────────────────
 function buildMonthView() {
+  const daysInMonth = DAYS_IN_MONTH[selectedMonth];
+  const year = new Date().getFullYear();
+
+  // Який день тижня є 1-е число (0=нд,1=пн...6=сб) → переводимо в пн-based (0=пн...6=нд)
+  const rawFirst = new Date(year, selectedMonth - 1, 1).getDay();
+  const firstWeekday = rawFirst === 0 ? 6 : rawFirst - 1; // 0=пн, 6=нд
+
+  // Заголовки днів тижня
+  const weekHeaders = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд']
+    .map(d => `<div class="month-weekday-header">${d}</div>`)
+    .join('');
+
+  // Порожні клітинки-зсуви на початку
   let cells = '';
-  for (let day = 1; day <= 31; day++) {
-    const sched = cachedSchedule(day);
-    const raw   = rawTasks(day);
+  for (let i = 0; i < firstWeekday; i++) {
+    cells += `<div class="month-cell month-cell--empty"></div>`;
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const sched = cachedSchedule(day, selectedMonth);
+    const raw   = rawTasks(day, selectedMonth);
     const tasks = sched
       ? [...sched].sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
       : sortQueue(raw);
     cells += buildMonthCell(day, tasks);
   }
+
   return `
     <div class="main-content">
-      <h2 style="color:white;font-size:1.25rem;margin-bottom:1rem">${CURRENT_MONTH}</h2>
+      <div class="month-nav">
+        <button class="btn btn--gray btn--sm" id="prevMonthBtn">←</button>
+        <h2 style="color:white;font-size:1.25rem;margin:0 1rem">${MONTH_NAMES[selectedMonth]} ${year}</h2>
+        <button class="btn btn--gray btn--sm" id="nextMonthBtn">→</button>
+      </div>
+      <div class="month-weekdays">${weekHeaders}</div>
       <div class="month-grid">${cells}</div>
     </div>`;
 }
@@ -92,7 +132,7 @@ function buildMonthCell(day, tasks) {
       if (t.isAuto) cls = 'month-chip--auto';
       style = `background-color: ${stringToColor(cleanName)}; border: none;`;
     }
-    const timeLabel = t.startTime ? t.startTime : (t.priority ? `★${t.priority}` : '');
+    const timeLabel = t.startTime ? t.startTime : (t.priority ? `П:${t.priority}` : '');
     return `<div class="month-chip ${cls}" style="${style}" title="${escapeHtml(timeLabel+' - '+cleanName)}">
       ${timeLabel ? `<span class="month-chip__time">${escapeHtml(timeLabel)}</span>` : ''}
       <span>${escapeHtml(cleanName)}</span>
@@ -110,17 +150,18 @@ function buildMonthCell(day, tasks) {
 
 // ── DAY VIEW ──────────────────────────────────────────────────────
 function buildDayView() {
-  const dayName     = DAYS_OF_WEEK[(selectedDay-1) % 7];
-  const isGenerated = !!cachedSchedule(selectedDay);
+  const _dow = new Date(new Date().getFullYear(), selectedMonth - 1, selectedDay).getDay();
+  const dayName = DAYS_OF_WEEK[_dow === 0 ? 6 : _dow - 1];
+  const isGenerated = !!cachedSchedule(selectedDay, selectedMonth);
   const displayTasks = isGenerated
-    ? [...cachedSchedule(selectedDay)].sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
-    : sortQueue(rawTasks(selectedDay));
+    ? [...cachedSchedule(selectedDay, selectedMonth)].sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
+    : sortQueue(rawTasks(selectedDay, selectedMonth));
 
   return `
     <div class="main-content">
       <div class="day-nav">
         <button class="btn btn--gray btn--sm" id="prevDayBtn">←</button>
-        <h2 class="day-nav__title">${selectedDay} ${CURRENT_MONTH}, ${dayName}</h2>
+        <h2 class="day-nav__title">${selectedDay} ${MONTH_NAMES[selectedMonth]}, ${dayName}</h2>
         <button class="btn btn--gray btn--sm" id="nextDayBtn">→</button>
       </div>
 
@@ -142,13 +183,14 @@ function buildControls(isGenerated) {
   if (isGenerated) {
     return `<button class="btn btn--amber" id="clearScheduleBtn">Змінити список завдань</button>`;
   }
-  const hasTasks = rawTasks(selectedDay).length > 0;
+  const hasTasks = rawTasks(selectedDay, selectedMonth).length > 0;
   return `
     <button class="btn btn--blue" id="openFormBtn">+ Додати подію або рутину</button>
     ${hasTasks ? `<button class="btn btn--green" id="generateBtn">Згенерувати розклад</button>` : ''}
   `;
 }
 
+// ── Форма (без змін) ──────────────────────────────────────────────
 function buildForm() {
   const f = formState;
   const showTimeInputs = f.type==='routine' || (f.type==='event' && f.eventMode==='manual');
@@ -202,6 +244,7 @@ function buildForm() {
     </div>`;
 }
 
+// ── Queue (без змін) ──────────────────────────────────────────────
 function buildQueue(tasks) {
   if (!tasks.length) return `<p class="empty-state">Немає запланованих справ. Додайте щось у чергу!</p>`;
   return tasks.map(task => {
@@ -215,7 +258,7 @@ function buildQueue(tasks) {
             <span class="task-name">${escapeHtml(task.text)}</span>
           </div>
           ${task.type==='event' && !task.startTime ? `
-            <div class="task-meta task-meta--priority" style="color:#fff;opacity:0.9">★ Пріоритет: ${task.priority} | ⏱ ${task.duration} хв</div>` : ''}
+            <div class="task-meta task-meta--priority" style="color:#fff;opacity:0.9">Пріоритет: ${task.priority} | ${task.duration} хв</div>` : ''}
           ${(task.startTime || task.endTime) ? `
             <div class="task-meta task-meta--time" style="color:#fff;opacity:0.9"> ${task.startTime||''}${task.endTime ? ' - '+task.endTime : ''}</div>` : ''}
         </div>
@@ -227,20 +270,62 @@ function buildQueue(tasks) {
   }).join('');
 }
 
+// ── Timeline з підтримкою накладання подій ────────────────────────
 function buildTimeline(tasks) {
   const hourLines = Array.from({length:25},(_,i)=>`
     <div class="timeline__hour-line" style="top:${i*60*1.2}px">
       <span class="timeline__hour-label">${i.toString().padStart(2,'0')}:00</span>
     </div>`).join('');
 
-  const blocks = tasks.map(task => {
-    if (!task.startTime || !task.endTime) return '';
-    const startMins = parseTime(task.startTime);
-    const endMins   = parseTime(task.endTime);
-    const top    = startMins * 1.2;
-    const height = (endMins - startMins) * 1.2;
+  // Крок 1 — розкладаємо всі події по рівнях (колонках)
+  const levels = [];
+  const placed = [];
+
+  tasks.forEach(task => {
+    if (!task.startTime || !task.endTime) return;
+    const start = parseTime(task.startTime);
+    const end   = parseTime(task.endTime);
+
+    let level = 0;
+    while (true) {
+      const conflict = (levels[level] || []).some(p => !(end <= p.start || start >= p.end));
+      if (!conflict) break;
+      level++;
+    }
+    if (!levels[level]) levels[level] = [];
+    levels[level].push({ start, end, task });
+    placed.push({ task, level, start, end });
+  });
+
+  // Крок 2 — тепер знаємо скільки всього колонок
+  const totalLevels = Math.max(1, levels.length);
+
+  // Крок 3 — для кожної події рахуємо span (скільки вільних колонок праворуч вона може зайняти)
+  const getSpan = (start, end, level) => {
+    let span = 1;
+    for (let next = level + 1; next < totalLevels; next++) {
+      const blocked = (levels[next] || []).some(p => !(end <= p.start || start >= p.end));
+      if (blocked) break;
+      span++;
+    }
+    return span;
+  };
+
+  // Зона годинних міток займає 4.5rem зліва — решта ширини ділиться між колонками
+  // Використовуємо CSS calc щоб правильно відняти ці 4.5rem
+  const blocks = placed.map(({ task, level, start, end }) => {
+    const top    = start * 1.2;
+    const height = (end - start) * 1.2;
+    const span   = getSpan(start, end, level);
+
+    // Ширина всієї зони подій = 100% - 4.5rem - 1rem (правий відступ)
+    // Ділимо її на totalLevels колонок
+    const leftOffset  = `calc(4.5rem + (100% - 5.5rem) / ${totalLevels} * ${level})`;
+    const blockWidth  = `calc((100% - 5.5rem) / ${totalLevels} * ${span} - 4px)`;
+
     let cls = 'timeline__block--event';
-    let style = `top:${top}px;height:${height}px;`;
+    let style = `top:${top}px; height:${height}px; left:${leftOffset}; width:${blockWidth}; right:auto;`;
+
     const cleanName = task.text.replace(' (Помодоро)', '');
     if (task.type === 'routine') {
       cls = 'timeline__block--routine';
@@ -248,13 +333,18 @@ function buildTimeline(tasks) {
       style += `background-color: ${stringToColor(cleanName)};`;
       if (task.isAuto) cls = 'timeline__block--auto';
     }
+
     return `
       <div class="timeline__block ${cls}" style="${style}">
         <div class="timeline__block-name">${escapeHtml(cleanName)}</div>
       </div>`;
   }).join('');
 
-  return `<div class="timeline">${hourLines}${blocks}</div>`;
+  return `
+    <div class="timeline" style="position: relative;">
+      ${hourLines}
+      ${blocks}
+    </div>`;
 }
 
 // ── Events ────────────────────────────────────────────────────────
@@ -262,6 +352,19 @@ function attachEvents() {
   document.getElementById('toggleViewBtn')?.addEventListener('click', () => {
     viewMode = viewMode==='month' ? 'day' : 'month';
     localStorage.setItem('viewMode', viewMode);
+    render();
+  });
+
+  // Місяць ← →
+  document.getElementById('prevMonthBtn')?.addEventListener('click', () => {
+    selectedMonth = Math.max(1, selectedMonth - 1);
+    localStorage.setItem('selectedMonth', selectedMonth);
+    render();
+  });
+
+  document.getElementById('nextMonthBtn')?.addEventListener('click', () => {
+    selectedMonth = Math.min(12, selectedMonth + 1);
+    localStorage.setItem('selectedMonth', selectedMonth);
     render();
   });
 
@@ -276,13 +379,27 @@ function attachEvents() {
   });
 
   document.getElementById('prevDayBtn')?.addEventListener('click', () => {
-    selectedDay = Math.max(1, selectedDay-1);
+    if (selectedDay > 1) {
+      selectedDay--;
+    } else if (selectedMonth > 1) {
+      selectedMonth--;
+      selectedDay = DAYS_IN_MONTH[selectedMonth];
+    }
     localStorage.setItem('selectedDay', selectedDay);
+    localStorage.setItem('selectedMonth', selectedMonth);
     render();
   });
+
   document.getElementById('nextDayBtn')?.addEventListener('click', () => {
-    selectedDay = Math.min(31, selectedDay+1);
+    const daysInMonth = DAYS_IN_MONTH[selectedMonth];
+    if (selectedDay < daysInMonth) {
+      selectedDay++;
+    } else if (selectedMonth < 12) {
+      selectedMonth++;
+      selectedDay = 1;
+    }
     localStorage.setItem('selectedDay', selectedDay);
+    localStorage.setItem('selectedMonth', selectedMonth);
     render();
   });
 
@@ -291,19 +408,21 @@ function attachEvents() {
   });
 
   document.getElementById('generateBtn')?.addEventListener('click', async () => {
-    const tasks = rawTasks(selectedDay);
+    const tasks = rawTasks(selectedDay, selectedMonth);
     if (!tasks.length) return;
     const btn = document.getElementById('generateBtn');
     btn.disabled = true;
-    btn.textContent = '⏳ Генерую...';
+    btn.textContent = 'Генерую...';
     const result = await fetchSchedule(tasks);
-    schedCache[selectedDay] = result;
+    const key = `${selectedMonth}-${selectedDay}`;
+    schedCache[key] = result;
     saveScheduleCache(schedCache);
     render();
   });
 
   document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
-    delete schedCache[selectedDay];
+    const key = `${selectedMonth}-${selectedDay}`;
+    delete schedCache[key];
     saveScheduleCache(schedCache);
     render();
   });
@@ -374,28 +493,46 @@ async function saveTask() {
   }
 
   const updated = { ...dayTasks };
+  const key = `${selectedMonth}-${selectedDay}`;
 
   if (editTaskId) {
-    updated[selectedDay] = (updated[selectedDay]||[]).map(t => t.id===editTaskId ? taskObj : t);
-    await saveAndClearCache(updated);
+    updated[key] = (updated[key]||[]).map(t => t.id===editTaskId ? taskObj : t);
+    await saveAndClearCache(updated, selectedMonth, selectedDay);
   } else {
-    let daysToAdd = [selectedDay];
+    let daysToAdd = [{month: selectedMonth, day: selectedDay}];
     if (formState.type==='routine') {
       if (formState.recurrence==='daily') {
-        daysToAdd = Array.from({length: 31-selectedDay+1}, (_,i)=>selectedDay+i);
+        // Додаємо щодня до кінця року (спрощено — до кінця грудня)
+        for (let m = selectedMonth; m <= 12; m++) {
+          const startDay = (m === selectedMonth) ? selectedDay : 1;
+          const endDay   = DAYS_IN_MONTH[m];
+          for (let d = startDay; d <= endDay; d++) {
+            daysToAdd.push({month: m, day: d});
+          }
+        }
       } else if (formState.recurrence==='weekly') {
-        daysToAdd = [];
-        for (let d=selectedDay; d<=31; d+=7) daysToAdd.push(d);
+        let d = selectedDay;
+        let m = selectedMonth;
+        while (m <= 12) {
+          daysToAdd.push({month: m, day: d});
+          d += 7;
+          if (d > DAYS_IN_MONTH[m]) {
+            m++;
+            d = d - DAYS_IN_MONTH[m-1];
+          }
+        }
       }
     }
-    // Save each day individually to DB
-    for (const d of daysToAdd) {
-      const newTask = { ...taskObj, id: taskObj.id+'-'+d };
-      updated[d] = [...(updated[d]||[]), newTask];
-      await apiSaveDayTasks(userName, d, updated[d]);
+
+    // Зберігаємо по днях
+    for (const {month, day} of daysToAdd) {
+      const dayKey = `${month}-${day}`;
+      const newTask = { ...taskObj, id: taskObj.id + '-' + dayKey };
+      updated[dayKey] = [...(updated[dayKey]||[]), newTask];
+      await apiSaveDayTasks(userName, day, month, updated[dayKey]);
     }
     dayTasks = updated;
-    delete schedCache[selectedDay];
+    delete schedCache[key];
     saveScheduleCache(schedCache);
   }
 
@@ -405,7 +542,7 @@ async function saveTask() {
 }
 
 function startEdit(id) {
-  const task = rawTasks(selectedDay).find(t => t.id===id);
+  const task = rawTasks(selectedDay, selectedMonth).find(t => t.id===id);
   if (!task) return;
   editTaskId = id;
   formState = {
@@ -423,8 +560,9 @@ function startEdit(id) {
 
 async function removeTask(id) {
   const updated = { ...dayTasks };
-  updated[selectedDay] = (updated[selectedDay]||[]).filter(t => t.id!==id);
-  await saveAndClearCache(updated);
+  const key = `${selectedMonth}-${selectedDay}`;
+  updated[key] = (updated[key]||[]).filter(t => t.id!==id);
+  await saveAndClearCache(updated, selectedMonth, selectedDay);
   render();
 }
 

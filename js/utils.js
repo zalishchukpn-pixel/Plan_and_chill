@@ -1,7 +1,6 @@
 // ===== SHARED STATE & UTILS =====
 
 export const DAYS_OF_WEEK = ['Понеділок','Вівторок','Середа','Четвер',"П'ятниця",'Субота','Неділя'];
-export const CURRENT_MONTH = 'Лютий';
 
 const API = 'http://localhost:8000';
 
@@ -32,18 +31,18 @@ export async function apiLogin(email, password) {
 export async function apiGetTasks(userName) {
   try {
     const res = await fetch(`${API}/tasks/${encodeURIComponent(userName)}`);
-    return await res.json(); // { "1": [...], "2": [...] }
+    return await res.json(); // { "2-14": [...], "3-5": [...] }
   } catch {
     return {};
   }
 }
 
-export async function apiSaveDayTasks(userName, day, tasks) {
+export async function apiSaveDayTasks(userName, day, month, tasks) {
   try {
     await fetch(`${API}/tasks/save`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_name: userName, day, tasks }),
+      body: JSON.stringify({ user_name: userName, day, month, tasks }),
     });
   } catch (err) {
     console.error('Помилка збереження задач:', err);

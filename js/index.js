@@ -17,57 +17,43 @@ function showError(msg) {
 }
 
 async function handle() {
-  const email = emailInput.value.trim();
+  const name     = nameInput.value.trim();
+  const email    = emailInput.value.trim();
   const password = passInput.value.trim();
-  const name = nameInput.value.trim();
-  const infoMsg = document.getElementById('idMsg');
 
-  if (!email || !password) {
-    showError('Введіть email та пароль');
+  if (!name || !email || !password) {
+    showError('Будь ласка, заповніть всі поля');
     return;
   }
 
-  errorMsg.hidden = true;
   loginBtn.disabled = true;
+  loginBtn.textContent = '...';
 
   try {
-    // check if email is correct
-    const checkRes = await fetch(`http://localhost:8000/check-email/${encodeURIComponent(email)}`);
-    const { exists } = await checkRes.json();
-
-    if (!exists) {
-      if (nameInput.hidden) {
-        nameInput.hidden = false;
-        infoMsg.textContent = "Цей email не зареєстрований. Введіть ім'я, щоб створити акаунт.";
-        infoMsg.hidden = false;
-        loginBtn.textContent = 'Зареєструватися';
-        loginBtn.disabled = false;
-        return;
-      } 
-
-      if (!name) {
-        showError('Будь ласка, введіть ім’я для реєстрації');
-        loginBtn.disabled = false;
-        return;
+    // Try to login first
+    let result;
+    try {
+      result = await apiLogin(email, password);
+    } catch (loginErr) {
+      // If login fails → try register (new user)
+      try {
+        result = await apiRegister(name, email, password);
+      } catch (regErr) {
+        throw new Error(regErr.message);
       }
-      const regData = await apiRegister(name, email, password);
-      saveAndRedirect(regData.name, email, password);
-    } else {
-      // if user exists, login
-      const loginData = await apiLogin(email, password);
-      saveAndRedirect(loginData.name, email, password);
     }
-  } catch (err) {
-    showError(err.message || 'Помилка доступу');
-    loginBtn.disabled = false;
-  }
-}
 
-function saveAndRedirect(name, email, password) {
-  localStorage.setItem('userName', name);
-  localStorage.setItem('userEmail', email);
-  localStorage.setItem('userPassword', password);
-  window.location.href = '/planner.html';
+    // Save to localStorage for quick access
+    localStorage.setItem('userName',     result.name);
+    localStorage.setItem('userEmail',    email);
+    localStorage.setItem('userPassword', password);
+
+    window.location.href = '/planner.html';
+  } catch (err) {
+    showError(err.message || 'Помилка входу');
+    loginBtn.disabled = false;
+    loginBtn.textContent = 'Увійти';
+  }
 }
 
 loginBtn.addEventListener('click', handle);
