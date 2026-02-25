@@ -2,8 +2,6 @@
 
 Планувальник дня з алгоритмом розстановки задач по помодоро та SQLite базою даних.
 
----
-
 ## Структура проекту
 
 ```
@@ -39,11 +37,44 @@ plan-chill/
 └── README.md
 ```
 
----
+## Запуск
+
+Відкрий два термінали у папці проекту:
+
+**Термінал 1 — бекенд:**
+```bash
+pip install fastapi uvicorn
+uvicorn main:app --reload
+```
+
+**Термінал 2 — фронтенд:**
+```bash
+python -m http.server 5173
+```
+
+Відкрий браузер: **http://localhost:5173**
+
+> `planner.db` створюється автоматично в папці проекту при першому запуску бекенду.
+
 
 ## База даних
 
 Файл `planner.db` створюється автоматично при першому запуску бекенду.
+
+
+## Як переглянути базу даних
+
+**Графічно** — [DB Browser for SQLite](https://sqlitebrowser.org) → відкрий `planner.db`
+
+**У терміналі:**
+```bash
+sqlite3 planner.db
+SELECT * FROM users;
+SELECT * FROM tasks;
+.quit
+```
+
+**У VS Code** доступне розширення **SQLite Viewer** для перегляду файлу бази даних.
 
 ### Таблиці
 
@@ -72,44 +103,7 @@ plan-chill/
 | POST   | `/tasks/save`                | Зберегти задачі одного дня       |
 | POST   | `/plan`                      | Згенерувати розклад (алгоритм)   |
 
----
 
-## Як переглянути базу даних
-
-**Графічно** — [DB Browser for SQLite](https://sqlitebrowser.org) → відкрий `planner.db`
-
-**У терміналі:**
-```bash
-sqlite3 planner.db
-SELECT * FROM users;
-SELECT * FROM tasks;
-.quit
-```
-
-**У VS Code** — розширення **SQLite Viewer**, просто відкрий `planner.db`
-
----
-
-## Запуск
-
-Відкрий **два** термінали у папці проекту:
-
-**Термінал 1 — бекенд:**
-```bash
-pip install fastapi uvicorn
-python Backend.py
-```
-
-**Термінал 2 — фронтенд:**
-```bash
-python -m http.server 5173
-```
-
-Відкрий браузер: **http://localhost:5173**
-
-> `planner.db` створюється автоматично в папці проекту при першому запуску бекенду.
-
----
 
 ## Використання
 
