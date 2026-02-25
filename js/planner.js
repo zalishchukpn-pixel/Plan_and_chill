@@ -1,24 +1,29 @@
 import {
   DAYS_OF_WEEK, CURRENT_MONTH,
-  getDayTasks, saveDayTasks,
+  apiGetTasks, apiSaveDayTasks,
   getScheduleCache, saveScheduleCache,
   fetchSchedule, parseTime,
   buildSidebar, escapeHtml, ICONS, requireAuth,
   stringToColor
 } from './utils.js';
 
-
 // ── Auth ──────────────────────────────────────────────────────────
 const userName = requireAuth();
 if (!userName) throw new Error('not auth');
 
 // ── State ─────────────────────────────────────────────────────────
-let viewMode     = localStorage.getItem('viewMode') || 'day';
-let selectedDay  = parseInt(localStorage.getItem('selectedDay') || '1');
-let dayTasks     = getDayTasks();
-let schedCache   = getScheduleCache();
-let formState    = null;   // null = hidden
-let editTaskId   = null;
+let viewMode    = localStorage.getItem('viewMode') || 'day';
+let selectedDay = parseInt(localStorage.getItem('selectedDay') || '1');
+let dayTasks    = {};       // loaded from DB
+let schedCache  = getScheduleCache();
+let formState   = null;
+let editTaskId  = null;
+
+// ── Load tasks from DB on start ───────────────────────────────────
+async function loadTasks() {
+  dayTasks = await apiGetTasks(userName);
+  render();
+}
 
 // ── Helpers ───────────────────────────────────────────────────────
 const EMPTY_FORM = () => ({
@@ -26,8 +31,8 @@ const EMPTY_FORM = () => ({
   start: '', end: '', duration: '60', priority: '5', recurrence: 'none'
 });
 
-function rawTasks(day) { return dayTasks[day] || []; }
-function cachedSchedule(day) { return schedCache[day] || null; }
+function rawTasks(day)      { return dayTasks[day] || []; }
+function cachedSchedule(day){ return schedCache[day] || null; }
 
 function sortQueue(tasks) {
   return [...tasks].sort((a, b) => {
@@ -38,9 +43,10 @@ function sortQueue(tasks) {
   });
 }
 
-function saveAndClearCache(updated) {
+async function saveAndClearCache(updated) {
   dayTasks = updated;
-  saveDayTasks(updated);
+  // Save only the current day to DB
+  await apiSaveDayTasks(userName, selectedDay, updated[selectedDay] || []);
   delete schedCache[selectedDay];
   saveScheduleCache(schedCache);
 }
@@ -79,26 +85,19 @@ function buildMonthCell(day, tasks) {
   const chips = tasks.slice(0,4).map(t => {
     let cls = 'month-chip--event';
     let style = '';
-    
-    // Очищаємо назву для місячного вигляду
     const cleanName = t.text.replace(' (Помодоро)', '');
-    
     if (t.type === 'routine') {
       cls = 'month-chip--routine';
     } else {
       if (t.isAuto) cls = 'month-chip--auto';
       style = `background-color: ${stringToColor(cleanName)}; border: none;`;
     }
-    
     const timeLabel = t.startTime ? t.startTime : (t.priority ? `★${t.priority}` : '');
-    
-    // Використовуємо cleanName у підказці (title) та тексті (span)
     return `<div class="month-chip ${cls}" style="${style}" title="${escapeHtml(timeLabel+' - '+cleanName)}">
       ${timeLabel ? `<span class="month-chip__time">${escapeHtml(timeLabel)}</span>` : ''}
       <span>${escapeHtml(cleanName)}</span>
     </div>`;
   }).join('');
-  
   const more = tasks.length > 4 ? `<div class="month-more">+${tasks.length-4} завдань</div>` : '';
   return `
     <div class="month-cell" data-day="${day}">
@@ -111,7 +110,7 @@ function buildMonthCell(day, tasks) {
 
 // ── DAY VIEW ──────────────────────────────────────────────────────
 function buildDayView() {
-  const dayName   = DAYS_OF_WEEK[(selectedDay-1) % 7];
+  const dayName     = DAYS_OF_WEEK[(selectedDay-1) % 7];
   const isGenerated = !!cachedSchedule(selectedDay);
   const displayTasks = isGenerated
     ? [...cachedSchedule(selectedDay)].sort((a,b)=>(a.startTime||'99:99').localeCompare(b.startTime||'99:99'))
@@ -126,20 +125,13 @@ function buildDayView() {
       </div>
 
       <div class="panel">
-        <!-- Controls -->
         <div class="controls-row" id="controlsRow">
           ${buildControls(isGenerated)}
         </div>
-
-        <!-- Form -->
         ${formState ? buildForm() : ''}
-
-        <!-- List header -->
         <h3 class="panel__header">
           ${isGenerated ? 'Ваш розклад' : 'Черга завдань'}
         </h3>
-
-        <!-- Content -->
         ${isGenerated ? buildTimeline(displayTasks) : buildQueue(displayTasks)}
       </div>
     </div>`;
@@ -160,27 +152,19 @@ function buildControls(isGenerated) {
 function buildForm() {
   const f = formState;
   const showTimeInputs = f.type==='routine' || (f.type==='event' && f.eventMode==='manual');
-
   return `
     <div class="form-card">
-      <!-- Type tabs -->
       <div class="tab-group">
         <button class="tab-btn ${f.type==='routine' ? 'tab-btn--gray' : 'tab-btn--inactive'}" data-type="routine">Рутина (сталий час)</button>
         <button class="tab-btn ${f.type==='event'   ? 'tab-btn--blue' : 'tab-btn--inactive'}" data-type="event">Подія (гнучка)</button>
       </div>
-
-      <!-- Name -->
       <input id="formText" class="form-input form-input--full" type="text"
              placeholder="Назва..." value="${escapeHtml(f.text)}"/>
-
-      <!-- Event mode -->
       ${f.type==='event' ? `
         <div class="tab-group" style="margin-bottom:1rem">
           <button class="tab-btn-outline ${f.eventMode==='auto'   ? 'tab-btn-outline--active':'tab-btn-outline--inactive'}" data-mode="auto">Автопідбір</button>
           <button class="tab-btn-outline ${f.eventMode==='manual' ? 'tab-btn-outline--active':'tab-btn-outline--inactive'}" data-mode="manual">Вказати час вручну</button>
         </div>` : ''}
-
-      <!-- Time inputs or duration/priority -->
       ${showTimeInputs ? `
         <div class="form-row">
           <div class="form-group">
@@ -202,8 +186,6 @@ function buildForm() {
             <input id="formPriority" class="form-input" type="number" min="1" max="10" value="${escapeHtml(f.priority)}" placeholder="5"/>
           </div>
         </div>`}
-
-      <!-- Recurrence (routine only, not editing) -->
       ${(f.type==='routine' && !editTaskId) ? `
         <div class="form-group" style="margin-bottom:1rem">
           <label class="form-label">Повторюваність</label>
@@ -213,8 +195,6 @@ function buildForm() {
             <option value="weekly" ${f.recurrence==='weekly' ?'selected':''}>Щотижня в цей день</option>
           </select>
         </div>` : ''}
-
-      <!-- Actions -->
       <div class="form-row">
         <button class="btn btn--green btn--full" id="saveTaskBtn">${editTaskId ? 'Оновити' : 'Зберегти'}</button>
         <button class="btn btn--red   btn--full" id="cancelFormBtn">Скасувати</button>
@@ -227,7 +207,6 @@ function buildQueue(tasks) {
   return tasks.map(task => {
     const isRoutine = task.type === 'routine';
     const bgColor = isRoutine ? '' : `background-color: ${stringToColor(task.text)};`;
-
     return `
       <div class="task-item ${isRoutine ? 'task-item--routine' : ''}" style="${bgColor}">
         <div>
@@ -260,21 +239,15 @@ function buildTimeline(tasks) {
     const endMins   = parseTime(task.endTime);
     const top    = startMins * 1.2;
     const height = (endMins - startMins) * 1.2;
-    
     let cls = 'timeline__block--event';
     let style = `top:${top}px;height:${height}px;`;
-    
-    // Очищаємо назву від "(Помодоро)" і для кольору, і для тексту
     const cleanName = task.text.replace(' (Помодоро)', '');
-    
     if (task.type === 'routine') {
-        cls = 'timeline__block--routine';
+      cls = 'timeline__block--routine';
     } else {
-        style += `background-color: ${stringToColor(cleanName)};`;
-        if (task.isAuto) cls = 'timeline__block--auto';
+      style += `background-color: ${stringToColor(cleanName)};`;
+      if (task.isAuto) cls = 'timeline__block--auto';
     }
-    
-    // Тепер виводимо cleanName замість task.text
     return `
       <div class="timeline__block ${cls}" style="${style}">
         <div class="timeline__block-name">${escapeHtml(cleanName)}</div>
@@ -286,15 +259,12 @@ function buildTimeline(tasks) {
 
 // ── Events ────────────────────────────────────────────────────────
 function attachEvents() {
-  // Sidebar toggle view
-  const toggleBtn = document.getElementById('toggleViewBtn');
-  if (toggleBtn) toggleBtn.addEventListener('click', () => {
+  document.getElementById('toggleViewBtn')?.addEventListener('click', () => {
     viewMode = viewMode==='month' ? 'day' : 'month';
     localStorage.setItem('viewMode', viewMode);
     render();
   });
 
-  // Month cell click
   document.querySelectorAll('.month-cell').forEach(cell => {
     cell.addEventListener('click', () => {
       selectedDay = parseInt(cell.dataset.day);
@@ -305,56 +275,51 @@ function attachEvents() {
     });
   });
 
-  // Day nav
-  const prevBtn = document.getElementById('prevDayBtn');
-  const nextBtn = document.getElementById('nextDayBtn');
-  if (prevBtn) prevBtn.addEventListener('click', () => { selectedDay = Math.max(1, selectedDay-1); localStorage.setItem('selectedDay', selectedDay); render(); });
-  if (nextBtn) nextBtn.addEventListener('click', () => { selectedDay = Math.min(31, selectedDay+1); localStorage.setItem('selectedDay', selectedDay); render(); });
+  document.getElementById('prevDayBtn')?.addEventListener('click', () => {
+    selectedDay = Math.max(1, selectedDay-1);
+    localStorage.setItem('selectedDay', selectedDay);
+    render();
+  });
+  document.getElementById('nextDayBtn')?.addEventListener('click', () => {
+    selectedDay = Math.min(31, selectedDay+1);
+    localStorage.setItem('selectedDay', selectedDay);
+    render();
+  });
 
-  // Open form
-  const openFormBtn = document.getElementById('openFormBtn');
-  if (openFormBtn) openFormBtn.addEventListener('click', () => { formState = EMPTY_FORM(); editTaskId = null; render(); });
+  document.getElementById('openFormBtn')?.addEventListener('click', () => {
+    formState = EMPTY_FORM(); editTaskId = null; render();
+  });
 
-  // Generate schedule
-  const generateBtn = document.getElementById('generateBtn');
-  if (generateBtn) generateBtn.addEventListener('click', async () => {
+  document.getElementById('generateBtn')?.addEventListener('click', async () => {
     const tasks = rawTasks(selectedDay);
     if (!tasks.length) return;
-    generateBtn.disabled = true;
-    generateBtn.textContent = '⏳ Генерую...';
+    const btn = document.getElementById('generateBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Генерую...';
     const result = await fetchSchedule(tasks);
     schedCache[selectedDay] = result;
     saveScheduleCache(schedCache);
     render();
   });
 
-  // Clear schedule
-  const clearBtn = document.getElementById('clearScheduleBtn');
-  if (clearBtn) clearBtn.addEventListener('click', () => {
+  document.getElementById('clearScheduleBtn')?.addEventListener('click', () => {
     delete schedCache[selectedDay];
     saveScheduleCache(schedCache);
     render();
   });
 
-  // Form type tabs
   document.querySelectorAll('[data-type]').forEach(btn => {
     btn.addEventListener('click', () => { formState.type = btn.dataset.type; render(); });
   });
-
-  // Form mode tabs
   document.querySelectorAll('[data-mode]').forEach(btn => {
     btn.addEventListener('click', () => { formState.eventMode = btn.dataset.mode; render(); });
   });
 
-  // Save task
-  const saveBtn = document.getElementById('saveTaskBtn');
-  if (saveBtn) saveBtn.addEventListener('click', saveTask);
+  document.getElementById('saveTaskBtn')?.addEventListener('click', saveTask);
+  document.getElementById('cancelFormBtn')?.addEventListener('click', () => {
+    formState = null; editTaskId = null; render();
+  });
 
-  // Cancel form
-  const cancelBtn = document.getElementById('cancelFormBtn');
-  if (cancelBtn) cancelBtn.addEventListener('click', () => { formState = null; editTaskId = null; render(); });
-
-  // Edit / Delete buttons
   document.querySelectorAll('[data-edit]').forEach(btn => {
     btn.addEventListener('click', () => startEdit(btn.dataset.edit));
   });
@@ -363,9 +328,8 @@ function attachEvents() {
   });
 }
 
-function saveTask() {
-  // Collect current form values
-  const textEl  = document.getElementById('formText');
+async function saveTask() {
+  const textEl = document.getElementById('formText');
   if (!textEl) return;
   formState.text = textEl.value;
 
@@ -390,7 +354,7 @@ function saveTask() {
   }
 
   const taskObj = {
-    id: editTaskId || Date.now().toString(),
+    id:   editTaskId || Date.now().toString(),
     text: formState.text,
     type: formState.type,
   };
@@ -413,6 +377,7 @@ function saveTask() {
 
   if (editTaskId) {
     updated[selectedDay] = (updated[selectedDay]||[]).map(t => t.id===editTaskId ? taskObj : t);
+    await saveAndClearCache(updated);
   } else {
     let daysToAdd = [selectedDay];
     if (formState.type==='routine') {
@@ -423,12 +388,17 @@ function saveTask() {
         for (let d=selectedDay; d<=31; d+=7) daysToAdd.push(d);
       }
     }
-    daysToAdd.forEach(d => {
-      updated[d] = [...(updated[d]||[]), { ...taskObj, id: taskObj.id+'-'+d }];
-    });
+    // Save each day individually to DB
+    for (const d of daysToAdd) {
+      const newTask = { ...taskObj, id: taskObj.id+'-'+d };
+      updated[d] = [...(updated[d]||[]), newTask];
+      await apiSaveDayTasks(userName, d, updated[d]);
+    }
+    dayTasks = updated;
+    delete schedCache[selectedDay];
+    saveScheduleCache(schedCache);
   }
 
-  saveAndClearCache(updated);
   formState  = null;
   editTaskId = null;
   render();
@@ -451,12 +421,12 @@ function startEdit(id) {
   render();
 }
 
-function removeTask(id) {
+async function removeTask(id) {
   const updated = { ...dayTasks };
   updated[selectedDay] = (updated[selectedDay]||[]).filter(t => t.id!==id);
-  saveAndClearCache(updated);
+  await saveAndClearCache(updated);
   render();
 }
 
 // ── Init ──────────────────────────────────────────────────────────
-render();
+loadTasks();

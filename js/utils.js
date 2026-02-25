@@ -3,16 +3,54 @@
 export const DAYS_OF_WEEK = ['Понеділок','Вівторок','Середа','Четвер',"П'ятниця",'Субота','Неділя'];
 export const CURRENT_MONTH = 'Лютий';
 
-// --- Storage helpers ---
-export function getDayTasks() {
-  try { return JSON.parse(localStorage.getItem('dayTasks') || '{}'); }
-  catch { return {}; }
+const API = 'http://localhost:8000';
+
+// --- Auth API ---
+export async function apiRegister(name, email, password) {
+  const res = await fetch(`${API}/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Помилка реєстрації');
+  return data;
 }
 
-export function saveDayTasks(obj) {
-  localStorage.setItem('dayTasks', JSON.stringify(obj));
+export async function apiLogin(email, password) {
+  const res = await fetch(`${API}/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Невірний email або пароль');
+  return data; // { ok: true, name }
 }
 
+// --- Tasks API ---
+export async function apiGetTasks(userName) {
+  try {
+    const res = await fetch(`${API}/tasks/${encodeURIComponent(userName)}`);
+    return await res.json(); // { "1": [...], "2": [...] }
+  } catch {
+    return {};
+  }
+}
+
+export async function apiSaveDayTasks(userName, day, tasks) {
+  try {
+    await fetch(`${API}/tasks/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_name: userName, day, tasks }),
+    });
+  } catch (err) {
+    console.error('Помилка збереження задач:', err);
+  }
+}
+
+// --- Schedule cache (session only, not persisted) ---
 export function getScheduleCache() {
   try { return JSON.parse(sessionStorage.getItem('scheduleCache') || '{}'); }
   catch { return {}; }
@@ -39,13 +77,7 @@ export function parseTime(timeStr) {
   return timeToMins(timeStr);
 }
 
-// --- Navigation ---
-export function navigateTo(page) {
-  window.location.href = `/${page}.html`;
-}
-
-// --- API ---
-// --- API ---
+// --- API schedule ---
 export async function fetchSchedule(tasksForDay) {
   const converted = tasksForDay.map(t => ({
     ...t,
@@ -55,12 +87,11 @@ export async function fetchSchedule(tasksForDay) {
     priority:  parseInt(t.priority)  || 5,
   }));
 
-  // Читаємо налаштування Помодоро користувача (якщо немає - беремо стандартні 25 і 5)
-  const pWork = parseInt(localStorage.getItem('pomodoroWork')) || 25;
+  const pWork  = parseInt(localStorage.getItem('pomodoroWork'))  || 25;
   const pBreak = parseInt(localStorage.getItem('pomodoroBreak')) || 5;
 
   try {
-    const res = await fetch('http://localhost:8000/plan', {
+    const res = await fetch(`${API}/plan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -122,7 +153,7 @@ export function requireAuth() {
 }
 
 // --- Sidebar builder ---
-export function buildSidebar(activePage, viewMode, onToggleView) {
+export function buildSidebar(activePage, viewMode) {
   const userName = localStorage.getItem('userName') || '';
   const isSettings = activePage === 'settings';
   const isPlanner  = activePage === 'planner';
@@ -159,9 +190,7 @@ export function escapeHtml(str) {
     .replace(/"/g,'&quot;');
 }
 
-// Вставте це в js/utils.js
-
-// Палітра з 20 гарних, контрастних кольорів
+// --- Color palette ---
 const PALETTE = [
   '#E63946', '#F4A261', '#2A9D8F', '#264653', '#8AB17D',
   '#B5838D', '#6D6875', '#457B9D', '#1D3557', '#E07A5F',
@@ -170,33 +199,14 @@ const PALETTE = [
 ];
 
 export function stringToColor(taskName) {
-  // 1. Отримуємо словник уже закріплених кольорів
   let colorMap = {};
-  try {
-    colorMap = JSON.parse(localStorage.getItem('taskColors') || '{}');
-  } catch (e) {}
-
-  // 2. Якщо для цієї назви вже є колір — просто повертаємо його
-  if (colorMap[taskName]) {
-    return colorMap[taskName];
-  }
-
-  // 3. Якщо це нова подія, шукаємо кольори, які ще НЕ використовувались
+  try { colorMap = JSON.parse(localStorage.getItem('taskColors') || '{}'); } catch (e) {}
+  if (colorMap[taskName]) return colorMap[taskName];
   const usedColors = Object.values(colorMap);
-  let availableColors = PALETTE.filter(color => !usedColors.includes(color));
-
-  // 4. Якщо ти використав усі 20 кольорів, скидаємо обмеження і беремо будь-який з палітри
-  if (availableColors.length === 0) {
-    availableColors = PALETTE;
-  }
-
-  // 5. Вибираємо рандомний колір з доступних
-  const randomIndex = Math.floor(Math.random() * availableColors.length);
-  const chosenColor = availableColors[randomIndex];
-
-  // 6. Закріплюємо цей колір за назвою події і зберігаємо
-  colorMap[taskName] = chosenColor;
+  let available = PALETTE.filter(c => !usedColors.includes(c));
+  if (available.length === 0) available = PALETTE;
+  const chosen = available[Math.floor(Math.random() * available.length)];
+  colorMap[taskName] = chosen;
   localStorage.setItem('taskColors', JSON.stringify(colorMap));
-
-  return chosenColor;
+  return chosen;
 }

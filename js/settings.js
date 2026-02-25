@@ -3,13 +3,13 @@ import { buildSidebar, escapeHtml, ICONS, requireAuth } from './utils.js';
 const userName0 = requireAuth();
 if (!userName0) throw new Error('not auth');
 
-let view    = 'main';
+let view     = 'main';
 let userName = userName0;
 let newName  = '';
 
 function render() {
   const app = document.getElementById('app');
-  app.innerHTML = buildSidebar('settings', 'month', ()=>{}) + buildSettings();
+  app.innerHTML = buildSidebar('settings', 'month') + buildSettings();
   attachEvents();
 }
 
@@ -19,7 +19,6 @@ function buildSettings() {
       <button class="back-btn" id="backBtn">
         ${ICONS.back} Повернутися до планера
       </button>
-
       <div class="settings-card">
         ${view === 'main'       ? buildMain()       : ''}
         ${view === 'info'       ? buildInfo()       : ''}
@@ -32,14 +31,12 @@ function buildSettings() {
 function buildMain() {
   return `
     <h2 style="color:white;font-size:1.5rem;font-weight:600;text-align:center;margin-bottom:2.5rem">Налаштування акаунту</h2>
-
     <div style="display:flex;align-items:center;gap:1.5rem;margin-bottom:2.5rem">
       <div style="width:5rem;height:5rem;background:#d1d5db;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0">
         ${ICONS.userLg}
       </div>
       <h3 style="color:white;font-size:1.25rem;margin:0">${escapeHtml(userName)}</h3>
     </div>
-
     <button class="btn btn--gray btn--full" id="goInfoBtn"
             style="display:flex;align-items:center;gap:1rem;font-size:1.125rem;margin-bottom:1rem;justify-content:flex-start">
       ${ICONS.star} <span>Особиста інформація</span>
@@ -75,17 +72,14 @@ function buildInfo() {
 function buildChangeName() {
   return `
     <h2 style="color:white;font-size:1.5rem;font-weight:600;text-align:center;margin-bottom:2.5rem">Змінити ім'я</h2>
-
     <div class="settings-info-label" style="margin-bottom:0.5rem">Поточне ім'я</div>
     <div class="settings-info-row" style="margin-bottom:1.5rem">
       <div class="settings-info-value">${escapeHtml(userName)}</div>
     </div>
-
     <div class="settings-info-label" style="margin-bottom:0.5rem">Нове ім'я</div>
     <input id="newNameInput" class="form-input form-input--full"
            type="text" placeholder="Введіть нове ім'я"
            value="${escapeHtml(newName)}" autocomplete="off"/>
-
     <div class="form-row">
       <button class="btn btn--green btn--full" id="saveNameBtn" style="font-size:1.125rem">Зберегти</button>
       <button class="btn btn--gray  btn--full" id="cancelNameBtn" style="font-size:1.125rem">Скасувати</button>
@@ -93,17 +87,14 @@ function buildChangeName() {
 }
 
 function buildPomodoro() {
-  const pWork = localStorage.getItem('pomodoroWork') || '25';
+  const pWork  = localStorage.getItem('pomodoroWork')  || '25';
   const pBreak = localStorage.getItem('pomodoroBreak') || '5';
   return `
     <h2 style="color:white;font-size:1.5rem;font-weight:600;text-align:center;margin-bottom:2.5rem">Налаштування Помодоро</h2>
-
     <div class="settings-info-label" style="margin-bottom:0.5rem">Час роботи (хвилин)</div>
     <input id="pomodoroWorkInput" class="form-input form-input--full" type="number" min="1" value="${escapeHtml(pWork)}" />
-
     <div class="settings-info-label" style="margin-bottom:0.5rem">Час відпочинку (хвилин)</div>
     <input id="pomodoroBreakInput" class="form-input form-input--full" type="number" min="1" value="${escapeHtml(pBreak)}" />
-
     <div class="form-row">
       <button class="btn btn--green btn--full" id="savePomodoroBtn" style="font-size:1.125rem">Зберегти</button>
       <button class="btn btn--gray  btn--full" id="cancelPomodoroBtn" style="font-size:1.125rem">Скасувати</button>
@@ -112,24 +103,19 @@ function buildPomodoro() {
 
 function attachEvents() {
   document.getElementById('backBtn')?.addEventListener('click', () => { window.location.href = '/planner.html'; });
-
   document.getElementById('goInfoBtn')?.addEventListener('click', () => { view='info'; render(); });
   document.getElementById('goChangeNameBtn')?.addEventListener('click', () => { view='changeName'; newName=''; render(); });
   document.getElementById('goPomodoroBtn')?.addEventListener('click', () => { view='pomodoro'; render(); });
-
   document.getElementById('logoutBtn')?.addEventListener('click', () => {
     localStorage.clear();
     window.location.href = '/index.html';
   });
-
   document.getElementById('backToMainBtn')?.addEventListener('click', () => { view='main'; render(); });
   document.getElementById('cancelNameBtn')?.addEventListener('click', () => { view='main'; newName=''; render(); });
   document.getElementById('cancelPomodoroBtn')?.addEventListener('click', () => { view='main'; render(); });
 
-  // Збереження імені
   document.getElementById('saveNameBtn')?.addEventListener('click', () => {
-    const input = document.getElementById('newNameInput');
-    const val   = input?.value.trim();
+    const val = document.getElementById('newNameInput')?.value.trim();
     if (val) {
       localStorage.setItem('userName', val);
       userName = val;
@@ -137,12 +123,10 @@ function attachEvents() {
       render();
     }
   });
-
   document.getElementById('newNameInput')?.addEventListener('keydown', e => {
     if (e.key==='Enter') document.getElementById('saveNameBtn')?.click();
   });
 
-  // Збереження Помодоро
   document.getElementById('savePomodoroBtn')?.addEventListener('click', () => {
     const w = document.getElementById('pomodoroWorkInput')?.value;
     const b = document.getElementById('pomodoroBreakInput')?.value;
