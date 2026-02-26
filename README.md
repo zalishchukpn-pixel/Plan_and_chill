@@ -46,28 +46,58 @@ plan-chill/
    cd plan-chill
 (замініть ВАШ_ЮЗЕРНЕЙМ на реальний нікнейм власника репозиторію)
 
-(Рекомендовано) Створіть та активуйте віртуальне середовище:Bashpython -m venv .venvАктивуйте його:Bash# Windows
-.venv\Scripts\activate
+(Рекомендовано) Створіть та активуйте віртуальне середовище:
+ ```bash
+   python -m venv .venv
+```
 
-# macOS / Linux
-source .venv/bin/activate
-Встановіть залежності:Bashpip install -r requirements.txtЯкщо файлу requirements.txt ще немає — створіть його з таким вмістом:textfastapi
-uvicorn
-pydanticі повторно виконайте команду вище.
-Запустіть бекенд (перший термінал):Bashuvicorn backend.main:app --reload --port 8000
-Запустіть фронтенд (другий термінал, в корені проєкту):Bashpython -m http.server 5173
-Відкрийте в браузері:texthttp://localhost:5173
+2.Активуйте його:
+```bash
+   # Windows
+   .venv\Scripts\activate
+   
+   # macOS / Linux
+   source .venv/bin/activate
+```
+
+3.Встановіть залежності:
+```bash
+   pip install -r requirements.txt
+```
+
+4.Якщо файлу requirements.txt ще немає — створіть його з таким вмістом:
+```text
+   fastapi
+   uvicorn
+   pydantic
+```
+
+5.Запустіть фронтенд (другий термінал, в корені проєкту):
+```bash
+   python -m http.server 5173
+```
+
+6.Відкрийте в браузері:
+```bash
+http://localhost:5173
+```
 
 База даних planner.db створиться автоматично при першому запуску бекенду.
 
-Додаткові примітки (опціонально додати в README)
+Додаткові примітки
 
-Якщо хочете використовувати власний SMTP для відновлення пароля або сповіщень — створіть файл .env у корені проєкту та додайте туди:envSECRET_KEY=ваш_дуже_довгий_секретний_ключ_тут
+Якщо хочете використовувати власний SMTP для відновлення пароля або сповіщень — створіть файл .env у корені проєкту та додайте туди:
+
+```env
+SECRET_KEY=ваш_дуже_довгий_секретний_ключ_тут
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=ваша.пошта@gmail.com
 SMTP_PASSWORD=ваш_app_password_або_звичайний_пароль
-FROM_EMAIL=ваша.пошта@gmail.com(Для Gmail рекомендується використовувати App Password, а не основний пароль)
+FROM_EMAIL=ваша.пошта@gmail.com
+```
+
+(Для Gmail рекомендується використовувати App Password, а не основний пароль)
 Переглянути базу даних зручно через:
 розширення SQLite Viewer у VS Code
 програму DB Browser for SQLite
