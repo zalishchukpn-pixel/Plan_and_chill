@@ -68,7 +68,11 @@ Open two terminals in the project folder:
 
 **Terminal 1 — backend:**
 ```bash
-   cd Plan_and_chill/backend
+   cd Plan_and_chill
+```
+
+```bash
+   cd backend
 ```
 
 ```bash
@@ -76,6 +80,9 @@ uvicorn main:app --reload
 ```
 
 **Terminal 2 — frontend:**
+```bash
+   cd Plan_and_chill
+```
 ```bash
 cd frontend
 ```
