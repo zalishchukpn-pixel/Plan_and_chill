@@ -147,19 +147,20 @@ function renderTaskList(tasks) {
 
 function taskCard(t) {
   const bg  = t.type === "routine" ? "#6b7280" : eventColor(t.text);
-  const clr = t.type === "routine" ? "#fff" : "#1a1a1a";
+  const clr = "#fff"; // ПРИМУСОВО БІЛИЙ для всіх карток
   const meta = t.type === "routine"
     ? `${minsToTime(t.startTime||0)} — ${minsToTime(t.endTime||0)}${t.isRecurring?" · щотижня":""}`
     : `${t.duration||60} хв · пріоритет ${t.priority||3}`;
+  
   return `
-    <div class="task-item" style="background:${bg};color:${clr}">
+    <div class="task-item" style="background:${bg};color:${clr};text-shadow: 0 1px 2px rgba(0,0,0,0.2);">
       <div class="task-item__info">
-        <span class="task-badge" style="color:${clr}">${t.type==="routine"?(t.isRecurring?"щотижня":"рутина"):"подія"}</span>
+        <span class="task-badge" style="color:${clr};border-color:rgba(255,255,255,0.3)">${t.type==="routine"?(t.isRecurring?"щотижня":"рутина"):"подія"}</span>
         <span class="task-name">${t.text}</span>
-        <div class="task-meta" style="opacity:0.7">${meta}</div>
+        <div class="task-meta" style="opacity:0.8;color:${clr}">${meta}</div>
       </div>
       <button class="task-delete-btn"
-        style="background:rgba(0,0,0,0.12);color:${clr};border:none;padding:0.35rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem;white-space:nowrap"
+        style="background:rgba(255,255,255,0.2);color:${clr};border:1px solid rgba(255,255,255,0.3);padding:0.35rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem;white-space:nowrap"
         data-id="${t.id}"
         data-recurring="${t.isRecurring||false}"
         data-routine-id="${t.routineId||""}"
@@ -189,18 +190,25 @@ function renderTimeline(sched) {
     items[i].totalCols = max + 1;
   }
   const LW = 48;
-  const blocks = items.map(item => {
+  // Знайти в planner.js всередині функції renderTimeline блок items.map
+const blocks = items.map(item => {
     const top    = item.startMins;
-    const height = Math.max(item.endMins - item.startMins, 20);
-    const bg     = item.type==="routine" ? "#6b7280" : eventColor(item.text);
-    const clr    = item.type==="routine" ? "#fff" : "#1a1a1a";
+    const height = (item.endMins - item.startMins) - 1; // Віднімаємо 1px для мікро-зазору
+    const bg     = item.type === "routine" ? "#6b7280" : eventColor(item.text);
+    const clr    = item.type === "routine" ? "#fff" : "#1a1a1a";
     const w      = `calc((100% - ${LW}px) / ${item.totalCols})`;
     const left   = `calc(${LW}px + ${item.col} * (100% - ${LW}px) / ${item.totalCols})`;
-    return `<div class="timeline__block" style="top:${top}px;height:${height}px;width:${w};left:${left};background:${bg};color:${clr}">
-      <div class="timeline__block-time">${item.startTime} — ${item.endTime}</div>
-      <div class="timeline__block-name">${item.text}</div>
+
+    return `
+    <div class="timeline__block" style="top:${top}px; height:${height}px; width:${w}; left:${left}; background:${bg}; color:${clr};">
+      <span class="timeline__block-time" style="font-weight:bold; font-size:0.7rem; flex-shrink:0; white-space:nowrap; color:white !important;">
+        ${item.startTime}–${item.endTime}
+      </span>
+      <span class="timeline__block-name" style="font-size:0.85rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1;">
+        ${item.text}
+      </span>
     </div>`;
-  }).join("");
+}).join("");
   const hours = Array.from({length:25},(_,i)=>`
     <div class="timeline__hour-line" style="top:${i*60}px">
       <span class="timeline__hour-label">${String(i).padStart(2,"0")}:00</span>
