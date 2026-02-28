@@ -1,40 +1,40 @@
 # Plan & Chill
 
-Планувальник дня з алгоритмом розстановки задач по помодоро та SQLite базою даних.
+A day planner with a Pomodoro-based task scheduling algorithm and SQLite database.
 
-## Структура проекту
+## Project Structure
 
 ```
 Plan_and_chill/
 ├── frontend/
-│   ├── index.html          # Сторінка входу / реєстрації
-│   ├── planner.html        # Головна сторінка планувальника
-│   ├── settings.html       # Налаштування акаунту
+│   ├── index.html          # Login / registration page
+│   ├── planner.html        # Main planner page
+│   ├── settings.html       # Account settings
 │   ├── css/
-│   │   └── global.css      # Усі стилі проекту
+│   │   └── global.css      # All project styles
 │   └── js/
-│       ├── utils.js        # Спільні утиліти: API, sidebar, хелпери
-│       ├── index.js        # Логіка входу та реєстрації
-│       ├── planner.js      # Логіка планувальника (день/місяць, таймлайн, форма)
-│       └── settings.js     # Налаштування акаунту і Помодоро
+│       ├── utils.js        # Shared utilities: API, sidebar, helpers
+│       ├── index.js        # Login and registration logic
+│       ├── planner.js      # Planner logic (day/month, timeline, form)
+│       └── settings.js     # Account and Pomodoro settings
 │
 ├── backend/
-│   ├── main.py             # Точка входу FastAPI
-│   ├── database.py         # SQLite: підключення та ініціалізація таблиць
-│   ├── schemas.py          # Pydantic моделі
-│   ├── utils.py            # Алгоритм Помодоро та класи Event / Routine / Day
+│   ├── main.py             # FastAPI entry point
+│   ├── database.py         # SQLite: connection and table initialization
+│   ├── schemas.py          # Pydantic models
+│   ├── utils.py            # Pomodoro algorithm and Event / Routine / Day classes
 │   └── routers/
-│       ├── auth.py         # Реєстрація, вхід, перевірка пошти, user-info
-│       ├── tasks.py        # Збереження / завантаження задач
-│       └── plan.py         # Генерація розкладу
+│       ├── auth.py         # Registration, login, email check, user-info
+│       ├── tasks.py        # Save / load tasks
+│       └── plan.py         # Schedule generation
 │
 ├── requirements.txt
 └── README.md
 ```
 
-## Встановлення
+## Installation
 
-1. Клонуйте репозиторій:
+1. Clone the repository:
 
 ```bash
    git clone https://github.com/zalishchukpn-pixel/Plan_and_chill.git
@@ -43,12 +43,12 @@ Plan_and_chill/
    cd Plan_and_chill
 ```
 
-(Рекомендовано) Створіть та активуйте віртуальне середовище:
- ```bash
+(Recommended) Create and activate a virtual environment:
+```bash
    python -m venv .venv
 ```
 
-2.Активуйте його:
+2. Activate it:
 ```bash
    # Windows
    .venv\Scripts\activate
@@ -57,16 +57,16 @@ Plan_and_chill/
    source .venv/bin/activate
 ```
 
-3.Встановіть залежності:
+3. Install dependencies:
 ```bash
    pip install -r requirements.txt
 ```
 
-## Запуск
+## Running the App
 
-Відкрий два термінали у папці проекту:
+Open two terminals in the project folder:
 
-**Термінал 1 — бекенд:**
+**Terminal 1 — backend:**
 ```bash
    cd Plan_and_chill/backend
 ```
@@ -75,30 +75,33 @@ Plan_and_chill/
 uvicorn main:app --reload
 ```
 
-**Термінал 2 — фронтенд:**
+**Terminal 2 — frontend:**
+```bash
+cd frontend
+```
 ```bash
 python -m http.server 5173
 ```
 
-5.Відкрийте в браузері:
+5. Open in your browser:
 ```bash
 http://localhost:5173
 ```
 
 
-Відкрий браузер: **http://localhost:5173**
+Open in browser: **http://localhost:5173**
 
 
-## База даних
+## Database
 
-Файл `planner.db` створюється автоматично при першому запуску бекенду.
+The `planner.db` file is created automatically on the first backend launch.
 
 
-## Як переглянути базу даних
+## How to View the Database
 
-**Графічно** — [DB Browser for SQLite](https://sqlitebrowser.org) → відкрий `planner.db`
+**Graphically** — [DB Browser for SQLite](https://sqlitebrowser.org) → open `planner.db`
 
-**У терміналі:**
+**In the terminal:**
 ```bash
 sqlite3 planner.db
 SELECT * FROM users;
@@ -106,44 +109,44 @@ SELECT * FROM tasks;
 .quit
 ```
 
-**У VS Code** доступне розширення **SQLite Viewer** для перегляду файлу бази даних.
+**In VS Code** the **SQLite Viewer** extension is available for browsing the database file.
 
-### Таблиці
+### Tables
 
-**`users`** — акаунти користувачів
-| Поле     | Тип  | Опис                        |
+**`users`** — user accounts
+| Field    | Type | Description                 |
 |----------|------|-----------------------------|
-| name     | TEXT | Ім'я (PRIMARY KEY)          |
-| email    | TEXT | Email (унікальний)          |
-| password | TEXT | Пароль                      |
+| name     | TEXT | Name (PRIMARY KEY)          |
+| email    | TEXT | Email (unique)              |
+| password | TEXT | Password                    |
 
-**`tasks`** — задачі
-| Поле      | Тип     | Опис                              |
-|-----------|---------|-----------------------------------|
-| id        | TEXT    | ID задачі (PRIMARY KEY)           |
-| user_name | TEXT    | Ім'я користувача (зв'язок з users)|
-| day       | INTEGER | День місяця (1–31)                |
-| data      | TEXT    | JSON з усіма полями задачі        |
+**`tasks`** — tasks
+| Field     | Type    | Description                          |
+|-----------|---------|--------------------------------------|
+| id        | TEXT    | Task ID (PRIMARY KEY)                |
+| user_name | TEXT    | Username (foreign key to users)      |
+| day       | INTEGER | Day of the month (1–31)              |
+| data      | TEXT    | JSON with all task fields            |
 
-### API ендпоінти
+### API Endpoints
 
-| Метод  | URL                          | Що робить                        |
-|--------|------------------------------|----------------------------------|
-| POST   | `/register`                  | Реєстрація нового користувача    |
-| POST   | `/login`                     | Перевірка email + пароль         |
-| GET    | `/tasks/{user_name}`         | Завантажити всі задачі           |
-| POST   | `/tasks/save`                | Зберегти задачі одного дня       |
-| POST   | `/plan`                      | Згенерувати розклад (алгоритм)   |
+| Method | URL                          | Description                          |
+|--------|------------------------------|--------------------------------------|
+| POST   | `/register`                  | Register a new user                  |
+| POST   | `/login`                     | Verify email + password              |
+| GET    | `/tasks/{user_name}`         | Load all tasks                       |
+| POST   | `/tasks/save`                | Save tasks for a single day          |
+| POST   | `/plan`                      | Generate a schedule (algorithm)      |
 
 
 
-## Використання
+## Usage
 
-1. **Вхід** — введи ім'я, email та пароль. Перший вхід = автоматична реєстрація. Наступні входи — авторизація по email + пароль.
-2. **Планер** — обери день стрілочками або перейди у вигляд місяця.
-3. **Додати задачу** — натисни «+ Додати подію або рутину»:
-   - **Рутина** — фіксований час (заняття, сон тощо). Можна поставити повторення: щодня або щотижня.
-   - **Подія** — можна задати час вручну або обрати **Автопідбір** (алгоритм сам знайде вільний слот між рутинами).
-4. **Генерація розкладу** — після додавання задач натисни «Згенерувати розклад» — відобразиться таймлайн з блоками на весь день.
-5. **Редагування** — щоб змінити список, натисни «Змінити список завдань».
-6. **Налаштування** — через ліву панель: зміна імені, перегляд особистих даних, налаштування часу помодоро.
+1. **Login** — enter your name, email, and password. First login = automatic registration. Subsequent logins — authentication via email + password.
+2. **Planner** — select a day using the arrows or switch to the month view.
+3. **Add a task** — click «+ Add event or routine»:
+   - **Routine** — fixed time (classes, sleep, etc.). Can be set to repeat daily or weekly.
+   - **Event** — you can set the time manually or choose **Auto-schedule** (the algorithm finds a free slot between routines).
+4. **Generate schedule** — after adding tasks, click «Generate schedule» — a timeline with blocks for the whole day will be displayed.
+5. **Edit** — to modify the task list, click «Edit task list».
+6. **Settings** — accessible via the left panel: change name, view personal data, configure Pomodoro timer settings.
