@@ -1,59 +1,54 @@
-// ===== utils.js — спільні утиліти =====
+// ===== utils.js =====
 export const API = "http://localhost:8000";
 
-export function getUserName() {
-  return localStorage.getItem("user_name");
-}
-
+export function getUserName() { return localStorage.getItem("user_name"); }
 export function redirectIfNotLoggedIn() {
   if (!getUserName()) window.location.href = "index.html";
 }
-
-// Format minutes to "HH:MM"
 export function minsToTime(mins) {
-  const h = Math.floor(mins / 60) % 24;
-  const m = mins % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const h = Math.floor(mins / 60) % 24, m = mins % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
 }
-
-// Parse "HH:MM" to minutes
 export function timeToMins(timeStr) {
-  const [h, m] = timeStr.split(":").map(Number);
-  return h * 60 + m;
+  const [h, m] = timeStr.split(":").map(Number); return h * 60 + m;
 }
-
-// Generate a simple unique ID
 export function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 // ---- Кольори подій по імені ----
 const EVENT_COLORS = [
-  "#9CAF88","#6B8E23","#5A7D9A","#4682B4","#6A7BA2",
-  "#4F7C82","#5F9EA0","#8C8FA1","#9A8FBD","#A48CA3",
-  "#8B8589","#D8C3A5","#C2B280","#B66A50","#6D3B47"
+  "#F0F4C3","#E1F5FE","#F3E5F5","#E8F5E9","#FFF9C4",
+  "#FCE4EC","#E0F7FA","#F9FBE7","#FFF3E0","#F1F8E9",
+  "#EDE7F6","#E0F2F1","#FFFDE7","#F5F5F5","#EFEBE9"
 ];
 
-// Детермінований хеш рядка → індекс кольору
-function hashString(str) {
-  let h = 0;
-  for (let i = 0; i < str.length; i++) {
-    h = (h * 31 + str.charCodeAt(i)) >>> 0;
-  }
-  return h % EVENT_COLORS.length;
+const COLOR_STORE_KEY = "event_colors_map";
+function getColorMap() {
+  try { return JSON.parse(localStorage.getItem(COLOR_STORE_KEY) || "{}"); } catch { return {}; }
 }
-
+function saveColorMap(map) {
+  localStorage.setItem(COLOR_STORE_KEY, JSON.stringify(map));
+}
 export function eventColor(name) {
-  return EVENT_COLORS[hashString((name || "").toLowerCase().trim())];
+  if (!name) return EVENT_COLORS[0];
+  const key = name.toLowerCase().trim();
+  const map = getColorMap();
+  if (map[key]) return map[key];
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const color = EVENT_COLORS[h % EVENT_COLORS.length];
+  map[key] = color;
+  saveColorMap(map);
+  return color;
 }
 
-// Стара функція (залишаємо для сумісності, але в картках використовуємо eventColor)
 export const PRIORITY_COLORS = ["#ef4444","#f59e0b","#3b82f6","#10b981","#8b5cf6"];
 export function priorityColor(p) {
   return PRIORITY_COLORS[((p || 1) - 1) % PRIORITY_COLORS.length];
 }
 
-// Build sidebar HTML
+// ---- Sidebar ----
 export function buildSidebar(activePage, viewMode = null) {
   const user = getUserName() || "Гість";
   const viewToggle = (activePage === "planner" && viewMode !== null) ? `
@@ -62,8 +57,13 @@ export function buildSidebar(activePage, viewMode = null) {
         <button class="sidebar__toggle-btn ${viewMode==='day'?'sidebar__toggle-btn--active':''}" id="sidebarDayBtn">День</button>
         <button class="sidebar__toggle-btn ${viewMode==='month'?'sidebar__toggle-btn--active':''}" id="sidebarMonthBtn">Місяць</button>
       </div>` : "";
-  return `
-    <aside class="sidebar">
+
+  const html = `
+    <button class="burger-btn" id="burgerBtn" aria-label="Меню">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    <aside class="sidebar" id="sidebar">
       <button class="sidebar__title" onclick="window.location.href='planner.html'">Plan &amp;<br>Chill</button>
       <div class="sidebar__user">
         <div class="sidebar__avatar">
@@ -85,15 +85,26 @@ export function buildSidebar(activePage, viewMode = null) {
         Вийти
       </button>
     </aside>`;
+
+  setTimeout(() => {
+    const burger = document.getElementById("burgerBtn");
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("sidebarOverlay");
+    if (!burger || !sidebar || !overlay) return;
+    const open  = () => { sidebar.classList.add("sidebar--open"); overlay.classList.add("sidebar-overlay--visible"); burger.classList.add("burger-btn--open"); };
+    const close = () => { sidebar.classList.remove("sidebar--open"); overlay.classList.remove("sidebar-overlay--visible"); burger.classList.remove("burger-btn--open"); };
+    burger.addEventListener("click", () => sidebar.classList.contains("sidebar--open") ? close() : open());
+    overlay.addEventListener("click", close);
+  }, 0);
+
+  return html;
 }
 
-// Fetch all tasks for user
+// ---- API helpers ----
 export async function fetchAllTasks(userName) {
   const res = await fetch(`${API}/tasks/${encodeURIComponent(userName)}`);
   return res.ok ? res.json() : {};
 }
-
-// Save tasks for a specific day
 export async function saveTasksForDay(userName, day, tasks) {
   await fetch(`${API}/tasks/save`, {
     method: "POST",
@@ -101,29 +112,17 @@ export async function saveTasksForDay(userName, day, tasks) {
     body: JSON.stringify({ user_name: userName, day, tasks }),
   });
 }
-
-// Save recurring routines (stored in localStorage under key "recurring_routines_<userName>")
 export function getRecurringRoutines(userName) {
-  try {
-    return JSON.parse(localStorage.getItem(`recurring_routines_${userName}`) || "[]");
-  } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(`recurring_routines_${userName}`) || "[]"); } catch { return []; }
 }
-
 export function saveRecurringRoutines(userName, routines) {
   localStorage.setItem(`recurring_routines_${userName}`, JSON.stringify(routines));
 }
-
-// Generate plan
 export async function generatePlan(tasks, pomodoroWork, pomodoroBreak, isToday) {
   const res = await fetch(`${API}/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tasks,
-      pomodoro_work: pomodoroWork,
-      pomodoro_break: pomodoroBreak,
-      is_today: isToday,
-    }),
+    body: JSON.stringify({ tasks, pomodoro_work: pomodoroWork, pomodoro_break: pomodoroBreak, is_today: isToday }),
   });
   return res.ok ? res.json() : { schedule: [] };
 }

@@ -11,7 +11,7 @@ let pomodoroBreak = parseInt(localStorage.getItem("pomo_break") || "5");
 
 function render() {
   app.innerHTML = buildSidebar("settings") + `
-    <div class="main-content" style="align-items:center;justify-content:center">
+    <div class="main-content settings-main">
       <div class="settings-card">
         <h2 style="color:white;margin-bottom:1.5rem">Налаштування</h2>
 

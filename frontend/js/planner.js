@@ -11,79 +11,60 @@ redirectIfNotLoggedIn();
 const userName = getUserName();
 const app = document.getElementById("app");
 
-// State
 let allTasks = {};
 let currentDay = new Date().getDate();
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
-let viewMode = "day";
+let viewMode = "day";       // "day" | "month"
+let dayMode = "schedule";   // "schedule" | "edit"
 let schedule = [];
 let pomodoroWork  = parseInt(localStorage.getItem("pomo_work")  || "25");
 let pomodoroBreak = parseInt(localStorage.getItem("pomo_break") || "5");
 
-const WEEKDAY_LABELS = ["Нд","Пн","Вт","Ср","Чт","Пт","Сб"];
-const WEEKDAY_LABELS_SHORT = ["Нд","Пн","Вт","Ср","Чт","Пт","Сб"];
-
-// ---- Helpers ----
 function dayKey(day, month, year) {
-  return `${year}-${String(month + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  return `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
 }
+function currentKey() { return dayKey(currentDay, currentMonth, currentYear); }
 
-function currentKey() {
-  return dayKey(currentDay, currentMonth, currentYear);
-}
-
-// Повертає масив задач для поточного дня, включаючи рутини що повторюються
 function getTasksForCurrentDay() {
   const key = currentKey();
   const stored = allTasks[key] || [];
-  // Додаємо рутини що повторюються, якщо їх ще немає в цьому дні
   const recurring = getRecurringRoutines(userName);
-  const dayOfWeek = new Date(currentYear, currentMonth, currentDay).getDay(); // 0=Нд
-  const toAdd = recurring.filter(r => {
-    if (!r.repeatDays || !r.repeatDays.includes(dayOfWeek)) return false;
-    // Вже є в цьому дні (за routineId)?
-    return !stored.some(t => t.routineId === r.id);
-  }).map(r => ({
-    id: genId(),
-    routineId: r.id,
-    text: r.text,
-    type: "routine",
-    startTime: r.startTime,
-    endTime: r.endTime,
-    isRecurring: true,
-  }));
+  const dow = new Date(currentYear, currentMonth, currentDay).getDay();
+  const toAdd = recurring
+    .filter(r => r.repeatDays?.includes(dow) && !stored.some(t => t.routineId === r.id))
+    .map(r => ({ id: genId(), routineId: r.id, text: r.text, type: "routine", startTime: r.startTime, endTime: r.endTime, isRecurring: true }));
   return [...stored, ...toAdd];
+}
+
+async function regenerateSchedule() {
+  const tasks = getTasksForCurrentDay();
+  if (!tasks.length) { schedule = []; return; }
+  const today = new Date();
+  const isToday = currentDay===today.getDate() && currentMonth===today.getMonth() && currentYear===today.getFullYear();
+  const res = await generatePlan(tasks, pomodoroWork, pomodoroBreak, isToday);
+  schedule = res.schedule || [];
 }
 
 // ---- Bootstrap ----
 (async () => {
   allTasks = await fetchAllTasks(userName);
+  await regenerateSchedule();
   render();
 })();
 
-// ---- Render root ----
+// ---- Render ----
 function render() {
-  window.__sidebarViewChange = (mode) => { viewMode = mode; schedule = []; render(); };
   app.innerHTML = buildSidebar("planner", viewMode) + `<div class="main-content" id="mainContent"></div>`;
-  const sidebarDay = document.getElementById("sidebarDayBtn");
-  const sidebarMonth = document.getElementById("sidebarMonthBtn");
-  if (sidebarDay) sidebarDay.onclick = () => { viewMode = "day"; schedule = []; render(); };
-  if (sidebarMonth) sidebarMonth.onclick = () => { viewMode = "month"; schedule = []; render(); };
-  const main = document.getElementById("mainContent");
-  viewMode === "day" ? renderDayView(main) : renderMonthView(main);
+  document.getElementById("sidebarDayBtn")?.addEventListener("click", () => { viewMode="day"; render(); });
+  document.getElementById("sidebarMonthBtn")?.addEventListener("click", () => { viewMode="month"; render(); });
+  viewMode === "day" ? renderDayView(document.getElementById("mainContent")) : renderMonthView(document.getElementById("mainContent"));
 }
 
 // ============================================================
 // DAY VIEW
 // ============================================================
 function renderDayView(container) {
-  const tasks = getTasksForCurrentDay();
-  const today = new Date();
-  const isToday = currentDay === today.getDate() &&
-                  currentMonth === today.getMonth() &&
-                  currentYear === today.getFullYear();
-
   container.innerHTML = `
     <div class="day-nav">
       <button class="btn btn--gray btn--icon" id="prevDay">&#8592;</button>
@@ -91,137 +72,143 @@ function renderDayView(container) {
       <button class="btn btn--gray btn--icon" id="nextDay">&#8594;</button>
     </div>
 
-    <div class="controls-row">
-      <button class="btn btn--blue" id="addTaskBtn">+ Додати подію або рутину</button>
-      <button class="btn btn--amber" id="genBtn">Згенерувати розклад</button>
-      ${schedule.length ? `<button class="btn btn--gray btn--sm" id="clearSched">Змінити список завдань</button>` : ""}
+    <div class="mode-toggle-row">
+      <button class="mode-btn ${dayMode==='schedule'?'mode-btn--active':''}" id="modeScheduleBtn">Розклад</button>
+      <button class="mode-btn ${dayMode==='edit'?'mode-btn--active':''}" id="modeEditBtn">Редагувати</button>
     </div>
 
-    <div id="taskFormArea"></div>
+    <div id="dayContent"></div>`;
 
-    ${schedule.length ? renderTimeline(schedule) : renderTaskList(tasks)}
-  `;
-
-  document.getElementById("prevDay").onclick = () => changeDay(-1);
-  document.getElementById("nextDay").onclick = () => changeDay(1);
-  document.getElementById("addTaskBtn").onclick = () => showTaskForm(tasks);
-  document.getElementById("genBtn").onclick = async () => {
-    const res = await generatePlan(tasks, pomodoroWork, pomodoroBreak, isToday);
-    schedule = res.schedule || [];
-    render();
+  document.getElementById("prevDay").onclick = async () => {
+    const d = new Date(currentYear, currentMonth, currentDay - 1);
+    currentDay=d.getDate(); currentMonth=d.getMonth(); currentYear=d.getFullYear();
+    await regenerateSchedule(); render();
   };
-  const clrBtn = document.getElementById("clearSched");
-  if (clrBtn) clrBtn.onclick = () => { schedule = []; render(); };
+  document.getElementById("nextDay").onclick = async () => {
+    const d = new Date(currentYear, currentMonth, currentDay + 1);
+    currentDay=d.getDate(); currentMonth=d.getMonth(); currentYear=d.getFullYear();
+    await regenerateSchedule(); render();
+  };
+
+  document.getElementById("modeScheduleBtn").onclick = () => { dayMode="schedule"; renderDayContent(); };
+  document.getElementById("modeEditBtn").onclick     = () => { dayMode="edit";     renderDayContent(); };
+
+  renderDayContent();
+}
+
+function renderDayContent() {
+  const container = document.getElementById("dayContent");
+  dayMode === "schedule" ? renderScheduleMode(container) : renderEditMode(container);
+}
+
+// ---- РОЗКЛАД ----
+function renderScheduleMode(container) {
+  if (!schedule.length) {
+    container.innerHTML = `<p class="empty-state">Немає розкладу. Перейди в <strong>Редагувати</strong> щоб додати події.</p>`;
+    return;
+  }
+  container.innerHTML = renderTimeline(schedule);
+}
+
+// ---- РЕДАГУВАТИ ----
+function renderEditMode(container) {
+  const tasks = getTasksForCurrentDay();
+  container.innerHTML = `
+    <div class="edit-top-row">
+      <button class="btn btn--blue" id="addTaskBtn">+ Додати подію або рутину</button>
+      <button class="btn btn--gray" id="showScheduleBtn">Показати розклад</button>
+    </div>
+    <div id="taskFormArea"></div>
+    ${renderTaskList(tasks)}`;
+
+  document.getElementById("addTaskBtn").onclick = () => showTaskForm(getTasksForCurrentDay());
+  document.getElementById("showScheduleBtn").onclick = () => { dayMode="schedule"; renderDayContent(); };
 
   container.querySelectorAll(".task-delete-btn").forEach(btn => {
     btn.onclick = async () => {
-      const id = btn.dataset.id;
-      const isRecurring = btn.dataset.recurring === "true";
-      const routineId = btn.dataset.routineId;
-
-      if (isRecurring && routineId) {
-        // Видалити з recurring routines
-        const recs = getRecurringRoutines(userName).filter(r => r.id !== routineId);
-        saveRecurringRoutines(userName, recs);
+      const { id, recurring, routineId } = btn.dataset;
+      if (recurring === "true" && routineId) {
+        saveRecurringRoutines(userName, getRecurringRoutines(userName).filter(r => r.id !== routineId));
       } else {
         const key = currentKey();
         allTasks[key] = (allTasks[key] || []).filter(t => t.id !== id);
-        await saveTasksForDay(userName, key, allTasks[key] || []);
+        await saveTasksForDay(userName, key, allTasks[key]);
       }
-      schedule = [];
-      render();
+      await regenerateSchedule();
+      renderEditMode(document.getElementById("dayContent"));
     };
   });
 }
 
 function renderTaskList(tasks) {
-  if (!tasks.length) return `<p class="empty-state">Немає задач на цей день. Додай першу!</p>`;
-  return `<div id="taskList">${tasks.map(t => taskCard(t)).join("")}</div>`;
+  if (!tasks.length) return `<p class="empty-state">Немає задач. Натисни "+ Додати".</p>`;
+  return `<div class="task-list">${tasks.map(taskCard).join("")}</div>`;
 }
 
 function taskCard(t) {
-  const color = t.type === "routine" ? "var(--gray-badge)" : eventColor(t.text);
-  const meta  = t.type === "routine"
-    ? `${minsToTime(t.startTime || 0)} — ${minsToTime(t.endTime || 0)}${t.isRecurring ? " · повторюється" : ""}`
-    : `Тривалість: ${t.duration || 60} хв · Пріоритет: ${t.priority || 5}`;
+  const bg  = t.type === "routine" ? "#6b7280" : eventColor(t.text);
+  const clr = t.type === "routine" ? "#fff" : "#1a1a1a";
+  const meta = t.type === "routine"
+    ? `${minsToTime(t.startTime||0)} — ${minsToTime(t.endTime||0)}${t.isRecurring?" · щотижня":""}`
+    : `${t.duration||60} хв · пріоритет ${t.priority||3}`;
   return `
-    <div class="task-item ${t.type==='routine'?'task-item--routine':''}" style="--task-color:${color}">
-      <div>
-        <span class="task-badge">${t.type === "routine" ? (t.isRecurring ? "рутина (щотижня)" : "рутина") : "подія"}</span>
+    <div class="task-item" style="background:${bg};color:${clr}">
+      <div class="task-item__info">
+        <span class="task-badge" style="color:${clr}">${t.type==="routine"?(t.isRecurring?"щотижня":"рутина"):"подія"}</span>
         <span class="task-name">${t.text}</span>
-        <div class="task-meta">${meta}</div>
+        <div class="task-meta" style="opacity:0.7">${meta}</div>
       </div>
-      <div class="task-actions">
-        <button class="btn btn--red btn--sm task-delete-btn"
-          data-id="${t.id}"
-          data-recurring="${t.isRecurring ? 'true' : 'false'}"
-          data-routine-id="${t.routineId || ''}"
-        >${t.isRecurring ? "Видалити рутину" : "Видалити"}</button>
-      </div>
+      <button class="task-delete-btn"
+        style="background:rgba(0,0,0,0.12);color:${clr};border:none;padding:0.35rem 0.75rem;border-radius:6px;cursor:pointer;font-size:0.8rem;white-space:nowrap"
+        data-id="${t.id}"
+        data-recurring="${t.isRecurring||false}"
+        data-routine-id="${t.routineId||""}"
+      >Видалити</button>
     </div>`;
 }
 
-// ---- Timeline з підтримкою накладання (колонки) ----
+// ---- Timeline ----
 function renderTimeline(sched) {
-  const PX_PER_MIN = 1;
-
   const items = sched.map(item => ({
     ...item,
     startMins: timeToMins(item.startTime),
     endMins:   timeToMins(item.endTime),
-    col: 0,
-    totalCols: 1,
+    col: 0, totalCols: 1,
   }));
-
   for (let i = 0; i < items.length; i++) {
-    const usedCols = new Set();
-    for (let j = 0; j < i; j++) {
-      if (items[j].endMins > items[i].startMins && items[j].startMins < items[i].endMins) {
-        usedCols.add(items[j].col);
-      }
-    }
-    let col = 0;
-    while (usedCols.has(col)) col++;
+    const used = new Set();
+    for (let j = 0; j < i; j++)
+      if (items[j].endMins > items[i].startMins && items[j].startMins < items[i].endMins) used.add(items[j].col);
+    let col = 0; while (used.has(col)) col++;
     items[i].col = col;
   }
-
   for (let i = 0; i < items.length; i++) {
-    let maxCol = items[i].col;
-    for (let j = 0; j < items.length; j++) {
-      if (j !== i && items[j].endMins > items[i].startMins && items[j].startMins < items[i].endMins) {
-        if (items[j].col > maxCol) maxCol = items[j].col;
-      }
-    }
-    items[i].totalCols = maxCol + 1;
+    let max = items[i].col;
+    for (let j = 0; j < items.length; j++)
+      if (j!==i && items[j].endMins>items[i].startMins && items[j].startMins<items[i].endMins && items[j].col>max) max=items[j].col;
+    items[i].totalCols = max + 1;
   }
-
-  const LABEL_WIDTH = 48;
-
+  const LW = 48;
   const blocks = items.map(item => {
-    const top    = item.startMins * PX_PER_MIN;
-    const height = Math.max((item.endMins - item.startMins) * PX_PER_MIN, 20);
-    const cls    = item.type === "routine" ? "timeline__block--routine"
-                 : item.isAuto ? "timeline__block--auto"
-                 : "timeline__block--event";
-    const bgColor = item.type === "routine" ? "" : `background:${eventColor(item.text)};`;
-    const colW   = `calc((100% - ${LABEL_WIDTH}px) / ${item.totalCols})`;
-    const left   = `calc(${LABEL_WIDTH}px + ${item.col} * (100% - ${LABEL_WIDTH}px) / ${item.totalCols})`;
-    return `
-      <div class="timeline__block ${cls}" style="top:${top}px;height:${height}px;width:${colW};left:${left};position:absolute;${bgColor}">
-        <div class="timeline__block-time">${item.startTime} — ${item.endTime}</div>
-        <div class="timeline__block-name">${item.text}</div>
-      </div>`;
+    const top    = item.startMins;
+    const height = Math.max(item.endMins - item.startMins, 20);
+    const bg     = item.type==="routine" ? "#6b7280" : eventColor(item.text);
+    const clr    = item.type==="routine" ? "#fff" : "#1a1a1a";
+    const w      = `calc((100% - ${LW}px) / ${item.totalCols})`;
+    const left   = `calc(${LW}px + ${item.col} * (100% - ${LW}px) / ${item.totalCols})`;
+    return `<div class="timeline__block" style="top:${top}px;height:${height}px;width:${w};left:${left};background:${bg};color:${clr}">
+      <div class="timeline__block-time">${item.startTime} — ${item.endTime}</div>
+      <div class="timeline__block-name">${item.text}</div>
+    </div>`;
   }).join("");
-
-  const hourLines = Array.from({length:25},(_,i)=>`
+  const hours = Array.from({length:25},(_,i)=>`
     <div class="timeline__hour-line" style="top:${i*60}px">
       <span class="timeline__hour-label">${String(i).padStart(2,"0")}:00</span>
     </div>`).join("");
-
-  return `<div class="timeline" style="height:1440px;position:relative">${hourLines}${blocks}</div>`;
+  return `<div class="timeline" style="height:1440px;position:relative">${hours}${blocks}</div>`;
 }
 
-// ---- Add task form ----
+// ---- Форма додавання ----
 function showTaskForm(existingTasks) {
   const area = document.getElementById("taskFormArea");
   area.innerHTML = `
@@ -232,117 +219,87 @@ function showTaskForm(existingTasks) {
       </div>
       <div id="formFields"></div>
     </div>`;
-
   let taskType = "event";
-  renderFormFields(taskType);
+  renderFields(taskType);
+  document.getElementById("tabEvent").onclick   = () => { taskType="event";   renderFields(taskType); };
+  document.getElementById("tabRoutine").onclick = () => { taskType="routine"; renderFields(taskType); };
 
-  document.getElementById("tabEvent").onclick   = () => { taskType = "event";   renderFormFields(taskType); };
-  document.getElementById("tabRoutine").onclick = () => { taskType = "routine"; renderFormFields(taskType); };
-
-  function renderFormFields(type) {
+  function renderFields(type) {
     const f = document.getElementById("formFields");
     if (type === "routine") {
       f.innerHTML = `
-        <input class="form-input form-input--full" id="fText" placeholder="Назва рутини" />
+        <input class="form-input form-input--full" id="fText" placeholder="Назва рутини"/>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Початок</label>
-            <input type="time" class="form-input" id="fStart" value="08:00"/></div>
-          <div class="form-group"><label class="form-label">Кінець</label>
-            <input type="time" class="form-input" id="fEnd" value="09:00"/></div>
+          <div class="form-group"><label class="form-label">Початок</label><input type="time" class="form-input" id="fStart" value="08:00"/></div>
+          <div class="form-group"><label class="form-label">Кінець</label><input type="time" class="form-input" id="fEnd" value="09:00"/></div>
         </div>
-
         <div class="repeat-section">
-          <label class="form-label" style="margin-bottom:0.5rem;display:block">Повторювати щотижня</label>
+          <label class="form-label" style="display:block;margin-bottom:0.5rem">Повторювати щотижня</label>
           <div class="weekday-picker">
-            ${["Нд","Пн","Вт","Ср","Чт","Пт","Сб"].map((d,i) => `
-              <label class="weekday-chip">
-                <input type="checkbox" class="weekday-cb" value="${i}"/>
-                <span>${d}</span>
-              </label>`).join("")}
+            ${["Нд","Пн","Вт","Ср","Чт","Пт","Сб"].map((d,i)=>`<label class="weekday-chip"><input type="checkbox" class="weekday-cb" value="${i}"/><span>${d}</span></label>`).join("")}
           </div>
-          <p class="repeat-hint">Якщо нічого не обрано — рутина зберігається лише на цей день</p>
+          <p class="repeat-hint">Без вибору — лише на цей день</p>
         </div>
-
         <div class="controls-row" style="margin-top:1rem">
           <button class="btn btn--green" id="fSave">Зберегти</button>
           <button class="btn btn--gray" id="fCancel">Скасувати</button>
         </div>`;
-
       document.getElementById("fSave").onclick = async () => {
-        const text = document.getElementById("fText").value.trim();
-        if (!text) return;
+        const text = document.getElementById("fText").value.trim(); if (!text) return;
         const startTime = timeToMins(document.getElementById("fStart").value);
         const endTime   = timeToMins(document.getElementById("fEnd").value);
-
-        const checkedDays = [...document.querySelectorAll(".weekday-cb:checked")].map(cb => parseInt(cb.value));
-
-        if (checkedDays.length > 0) {
-          // Зберігаємо як recurring routine
+        const days = [...document.querySelectorAll(".weekday-cb:checked")].map(c=>parseInt(c.value));
+        if (days.length) {
           const recs = getRecurringRoutines(userName);
-          recs.push({ id: genId(), text, startTime, endTime, repeatDays: checkedDays });
+          recs.push({ id: genId(), text, startTime, endTime, repeatDays: days });
           saveRecurringRoutines(userName, recs);
         } else {
-          // Зберігаємо лише на поточний день
-          const task = { id: genId(), text, type: "routine", startTime, endTime };
           const key = currentKey();
-          existingTasks.push(task);
+          existingTasks.push({ id: genId(), text, type: "routine", startTime, endTime });
           allTasks[key] = existingTasks;
           await saveTasksForDay(userName, key, existingTasks);
         }
-        schedule = [];
-        render();
+        await regenerateSchedule();
+        renderEditMode(document.getElementById("dayContent"));
       };
-      document.getElementById("fCancel").onclick = () => { area.innerHTML = ""; };
-
+      document.getElementById("fCancel").onclick = () => { area.innerHTML=""; };
     } else {
-      // EVENT
       f.innerHTML = `
-        <input class="form-input form-input--full" id="fText" placeholder="Назва події" />
+        <input class="form-input form-input--full" id="fText" placeholder="Назва події"/>
         <div class="form-row">
-          <div class="form-group"><label class="form-label">Тривалість (хв)</label>
-            <input type="number" class="form-input" id="fDuration" value="60" min="5"/></div>
-          <div class="form-group"><label class="form-label">Пріоритет (1–5)</label>
-            <input type="number" class="form-input" id="fPriority" value="3" min="1" max="5"/></div>
+          <div class="form-group"><label class="form-label">Тривалість (хв)</label><input type="number" class="form-input" id="fDuration" value="60" min="5"/></div>
+          <div class="form-group"><label class="form-label">Пріоритет (1–5)</label><input type="number" class="form-input" id="fPriority" value="3" min="1" max="5"/></div>
         </div>
-        <div class="tab-group" id="modeGroup">
+        <div class="tab-group">
           <button class="tab-btn-outline tab-btn-outline--active" id="modeAuto">Автопідбір</button>
           <button class="tab-btn-outline tab-btn-outline--inactive" id="modeManual">Вручну</button>
         </div>
         <div id="manualTimeFields" style="display:none" class="form-row">
-          <div class="form-group"><label class="form-label">Початок</label>
-            <input type="time" class="form-input" id="fStart" value="10:00"/></div>
-          <div class="form-group"><label class="form-label">Кінець</label>
-            <input type="time" class="form-input" id="fEnd" value="11:00"/></div>
+          <div class="form-group"><label class="form-label">Початок</label><input type="time" class="form-input" id="fStart" value="10:00"/></div>
+          <div class="form-group"><label class="form-label">Кінець</label><input type="time" class="form-input" id="fEnd" value="11:00"/></div>
         </div>
         <div class="controls-row">
           <button class="btn btn--green" id="fSave">Зберегти</button>
           <button class="btn btn--gray" id="fCancel">Скасувати</button>
         </div>`;
-
-      let eventMode = "auto";
+      let mode = "auto";
       document.getElementById("modeAuto").onclick = () => {
-        eventMode = "auto";
-        document.getElementById("manualTimeFields").style.display = "none";
+        mode="auto"; document.getElementById("manualTimeFields").style.display="none";
         document.getElementById("modeAuto").classList.replace("tab-btn-outline--inactive","tab-btn-outline--active");
         document.getElementById("modeManual").classList.replace("tab-btn-outline--active","tab-btn-outline--inactive");
       };
       document.getElementById("modeManual").onclick = () => {
-        eventMode = "manual";
-        document.getElementById("manualTimeFields").style.display = "flex";
+        mode="manual"; document.getElementById("manualTimeFields").style.display="flex";
         document.getElementById("modeManual").classList.replace("tab-btn-outline--inactive","tab-btn-outline--active");
         document.getElementById("modeAuto").classList.replace("tab-btn-outline--active","tab-btn-outline--inactive");
       };
-
       document.getElementById("fSave").onclick = async () => {
-        const text = document.getElementById("fText").value.trim();
-        if (!text) return;
-        const task = {
-          id: genId(), text, type: "event",
-          duration: parseInt(document.getElementById("fDuration").value) || 60,
-          priority: parseInt(document.getElementById("fPriority").value) || 3,
-          eventMode,
-        };
-        if (eventMode === "manual") {
+        const text = document.getElementById("fText").value.trim(); if (!text) return;
+        const task = { id: genId(), text, type:"event",
+          duration: parseInt(document.getElementById("fDuration").value)||60,
+          priority: parseInt(document.getElementById("fPriority").value)||3,
+          eventMode: mode };
+        if (mode==="manual") {
           task.startTime = timeToMins(document.getElementById("fStart").value);
           task.endTime   = timeToMins(document.getElementById("fEnd").value);
         }
@@ -350,10 +307,10 @@ function showTaskForm(existingTasks) {
         existingTasks.push(task);
         allTasks[key] = existingTasks;
         await saveTasksForDay(userName, key, existingTasks);
-        schedule = [];
-        render();
+        await regenerateSchedule();
+        renderEditMode(document.getElementById("dayContent"));
       };
-      document.getElementById("fCancel").onclick = () => { area.innerHTML = ""; };
+      document.getElementById("fCancel").onclick = () => { area.innerHTML=""; };
     }
   }
 }
@@ -365,7 +322,7 @@ function renderMonthView(container) {
   const weekdays = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
   const offset   = (firstDay + 6) % 7;
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const daysInMonth = new Date(currentYear, currentMonth+1, 0).getDate();
   const recurring = getRecurringRoutines(userName);
 
   const cells = [];
@@ -374,20 +331,17 @@ function renderMonthView(container) {
     const key = dayKey(d, currentMonth, currentYear);
     const stored = allTasks[key] || [];
     const dow = new Date(currentYear, currentMonth, d).getDay();
-    const recForDay = recurring.filter(r => r.repeatDays && r.repeatDays.includes(dow));
-    const tasks = [...stored, ...recForDay.filter(r => !stored.some(t => t.routineId === r.id)).map(r => ({
-      id: r.id, routineId: r.id, text: r.text, type: "routine", isRecurring: true
-    }))];
+    const recForDay = recurring
+      .filter(r => r.repeatDays?.includes(dow) && !stored.some(t => t.routineId===r.id))
+      .map(r => ({ text: r.text, type: "routine" }));
+    const tasks = [...stored, ...recForDay];
     const chips = tasks.slice(0,3).map(t => {
-      const bg = t.type === "routine" ? "" : `style="background:${eventColor(t.text)}"`;
-      return `<div class="month-chip ${t.type==='routine'?'month-chip--routine':'month-chip--event'}" ${bg}>${t.text}</div>`;
+      const bg  = t.type==="routine" ? "#6b7280" : eventColor(t.text);
+      const clr = t.type==="routine" ? "#fff" : "#1a1a1a";
+      return `<div class="month-chip" style="background:${bg};color:${clr}">${t.text}</div>`;
     }).join("");
     const more = tasks.length > 3 ? `<div class="month-more">+${tasks.length-3}</div>` : "";
-    cells.push(`
-      <button class="month-cell" data-day="${d}">
-        <div class="month-cell__day">${d}</div>
-        ${chips}${more}
-      </button>`);
+    cells.push(`<button class="month-cell" data-day="${d}"><div class="month-cell__day">${d}</div>${chips}${more}</button>`);
   }
 
   container.innerHTML = `
@@ -399,31 +353,14 @@ function renderMonthView(container) {
     <div class="month-weekdays">${weekdays.map(w=>`<div class="month-weekday-header">${w}</div>`).join("")}</div>
     <div class="month-grid">${cells.join("")}</div>`;
 
-  document.getElementById("prevMonth").onclick = () => {
-    currentMonth--; if (currentMonth < 0) { currentMonth = 11; currentYear--; } render();
-  };
-  document.getElementById("nextMonth").onclick = () => {
-    currentMonth++; if (currentMonth > 11) { currentMonth = 0; currentYear++; } render();
-  };
-
+  document.getElementById("prevMonth").onclick = () => { currentMonth--; if(currentMonth<0){currentMonth=11;currentYear--;} render(); };
+  document.getElementById("nextMonth").onclick = () => { currentMonth++; if(currentMonth>11){currentMonth=0;currentYear++;} render(); };
   container.querySelectorAll(".month-cell").forEach(btn => {
-    btn.onclick = () => {
-      currentDay = parseInt(btn.dataset.day);
-      viewMode = "day";
-      schedule = [];
-      render();
+    btn.onclick = async () => {
+      currentDay=parseInt(btn.dataset.day); viewMode="day"; dayMode="schedule";
+      await regenerateSchedule(); render();
     };
   });
-}
-
-// ---- Helpers ----
-function changeDay(delta) {
-  const d = new Date(currentYear, currentMonth, currentDay + delta);
-  currentDay   = d.getDate();
-  currentMonth = d.getMonth();
-  currentYear  = d.getFullYear();
-  schedule = [];
-  render();
 }
 
 function monthName(m) {
