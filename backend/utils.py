@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 class Event:
     def __init__(self, name, priority, time_to_spend):
@@ -38,7 +38,8 @@ def round_to_5(minutes):
     return round(minutes / 5) * 5
 
 def get_current_time_minutes():
-    now = datetime.now()
+    UKRAINE_TZ = timezone(timedelta(hours=2))
+    now = datetime.now(UKRAINE_TZ)
     return now.hour * 60 + now.minute
 
 def algorithm(pomodoro, day: Day, is_today: bool):
