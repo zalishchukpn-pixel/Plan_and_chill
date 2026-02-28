@@ -2,7 +2,8 @@
 import {
   redirectIfNotLoggedIn, getUserName, buildSidebar,
   fetchAllTasks, saveTasksForDay, generatePlan,
-  genId, priorityColor, minsToTime, timeToMins
+  genId, eventColor, minsToTime, timeToMins,
+  getRecurringRoutines, saveRecurringRoutines
 } from "./utils.js";
 
 redirectIfNotLoggedIn();
@@ -11,14 +12,17 @@ const userName = getUserName();
 const app = document.getElementById("app");
 
 // State
-let allTasks = {};         // { "2026-03-05": [...], "2026-03-28": [...] }
+let allTasks = {};
 let currentDay = new Date().getDate();
 let currentMonth = new Date().getMonth();
 let currentYear = new Date().getFullYear();
-let viewMode = "day";      // "day" | "month"
+let viewMode = "day";
 let schedule = [];
 let pomodoroWork  = parseInt(localStorage.getItem("pomo_work")  || "25");
 let pomodoroBreak = parseInt(localStorage.getItem("pomo_break") || "5");
+
+const WEEKDAY_LABELS = ["Нд","Пн","Вт","Ср","Чт","Пт","Сб"];
+const WEEKDAY_LABELS_SHORT = ["Нд","Пн","Вт","Ср","Чт","Пт","Сб"];
 
 // ---- Helpers ----
 function dayKey(day, month, year) {
@@ -27,6 +31,29 @@ function dayKey(day, month, year) {
 
 function currentKey() {
   return dayKey(currentDay, currentMonth, currentYear);
+}
+
+// Повертає масив задач для поточного дня, включаючи рутини що повторюються
+function getTasksForCurrentDay() {
+  const key = currentKey();
+  const stored = allTasks[key] || [];
+  // Додаємо рутини що повторюються, якщо їх ще немає в цьому дні
+  const recurring = getRecurringRoutines(userName);
+  const dayOfWeek = new Date(currentYear, currentMonth, currentDay).getDay(); // 0=Нд
+  const toAdd = recurring.filter(r => {
+    if (!r.repeatDays || !r.repeatDays.includes(dayOfWeek)) return false;
+    // Вже є в цьому дні (за routineId)?
+    return !stored.some(t => t.routineId === r.id);
+  }).map(r => ({
+    id: genId(),
+    routineId: r.id,
+    text: r.text,
+    type: "routine",
+    startTime: r.startTime,
+    endTime: r.endTime,
+    isRecurring: true,
+  }));
+  return [...stored, ...toAdd];
 }
 
 // ---- Bootstrap ----
@@ -51,8 +78,7 @@ function render() {
 // DAY VIEW
 // ============================================================
 function renderDayView(container) {
-  const key = currentKey();
-  const tasks = allTasks[key] || [];
+  const tasks = getTasksForCurrentDay();
   const today = new Date();
   const isToday = currentDay === today.getDate() &&
                   currentMonth === today.getMonth() &&
@@ -90,9 +116,18 @@ function renderDayView(container) {
   container.querySelectorAll(".task-delete-btn").forEach(btn => {
     btn.onclick = async () => {
       const id = btn.dataset.id;
-      const key = currentKey();
-      allTasks[key] = (allTasks[key] || []).filter(t => t.id !== id);
-      await saveTasksForDay(userName, key, allTasks[key] || []);
+      const isRecurring = btn.dataset.recurring === "true";
+      const routineId = btn.dataset.routineId;
+
+      if (isRecurring && routineId) {
+        // Видалити з recurring routines
+        const recs = getRecurringRoutines(userName).filter(r => r.id !== routineId);
+        saveRecurringRoutines(userName, recs);
+      } else {
+        const key = currentKey();
+        allTasks[key] = (allTasks[key] || []).filter(t => t.id !== id);
+        await saveTasksForDay(userName, key, allTasks[key] || []);
+      }
       schedule = [];
       render();
     };
@@ -105,19 +140,23 @@ function renderTaskList(tasks) {
 }
 
 function taskCard(t) {
-  const color = t.type === "routine" ? "var(--gray-badge)" : priorityColor(t.priority);
+  const color = t.type === "routine" ? "var(--gray-badge)" : eventColor(t.text);
   const meta  = t.type === "routine"
-    ? `${minsToTime(t.startTime || 0)} — ${minsToTime(t.endTime || 0)}`
+    ? `${minsToTime(t.startTime || 0)} — ${minsToTime(t.endTime || 0)}${t.isRecurring ? " · повторюється" : ""}`
     : `Тривалість: ${t.duration || 60} хв · Пріоритет: ${t.priority || 5}`;
   return `
     <div class="task-item ${t.type==='routine'?'task-item--routine':''}" style="--task-color:${color}">
       <div>
-        <span class="task-badge">${t.type === "routine" ? "рутина" : "подія"}</span>
+        <span class="task-badge">${t.type === "routine" ? (t.isRecurring ? "рутина (щотижня)" : "рутина") : "подія"}</span>
         <span class="task-name">${t.text}</span>
         <div class="task-meta">${meta}</div>
       </div>
       <div class="task-actions">
-        <button class="btn btn--red btn--sm task-delete-btn" data-id="${t.id}">Видалити</button>
+        <button class="btn btn--red btn--sm task-delete-btn"
+          data-id="${t.id}"
+          data-recurring="${t.isRecurring ? 'true' : 'false'}"
+          data-routine-id="${t.routineId || ''}"
+        >${t.isRecurring ? "Видалити рутину" : "Видалити"}</button>
       </div>
     </div>`;
 }
@@ -126,7 +165,6 @@ function taskCard(t) {
 function renderTimeline(sched) {
   const PX_PER_MIN = 1;
 
-  // Визначаємо колонки для елементів що накладаються
   const items = sched.map(item => ({
     ...item,
     startMins: timeToMins(item.startTime),
@@ -135,7 +173,6 @@ function renderTimeline(sched) {
     totalCols: 1,
   }));
 
-  // Групуємо накладання
   for (let i = 0; i < items.length; i++) {
     const usedCols = new Set();
     for (let j = 0; j < i; j++) {
@@ -148,7 +185,6 @@ function renderTimeline(sched) {
     items[i].col = col;
   }
 
-  // Визначаємо totalCols для кожного елементу в групі
   for (let i = 0; i < items.length; i++) {
     let maxCol = items[i].col;
     for (let j = 0; j < items.length; j++) {
@@ -159,7 +195,7 @@ function renderTimeline(sched) {
     items[i].totalCols = maxCol + 1;
   }
 
-  const LABEL_WIDTH = 48; // px для годинних міток
+  const LABEL_WIDTH = 48;
 
   const blocks = items.map(item => {
     const top    = item.startMins * PX_PER_MIN;
@@ -167,10 +203,11 @@ function renderTimeline(sched) {
     const cls    = item.type === "routine" ? "timeline__block--routine"
                  : item.isAuto ? "timeline__block--auto"
                  : "timeline__block--event";
+    const bgColor = item.type === "routine" ? "" : `background:${eventColor(item.text)};`;
     const colW   = `calc((100% - ${LABEL_WIDTH}px) / ${item.totalCols})`;
     const left   = `calc(${LABEL_WIDTH}px + ${item.col} * (100% - ${LABEL_WIDTH}px) / ${item.totalCols})`;
     return `
-      <div class="timeline__block ${cls}" style="top:${top}px;height:${height}px;width:${colW};left:${left};position:absolute">
+      <div class="timeline__block ${cls}" style="top:${top}px;height:${height}px;width:${colW};left:${left};position:absolute;${bgColor}">
         <div class="timeline__block-time">${item.startTime} — ${item.endTime}</div>
         <div class="timeline__block-name">${item.text}</div>
       </div>`;
@@ -213,11 +250,52 @@ function showTaskForm(existingTasks) {
           <div class="form-group"><label class="form-label">Кінець</label>
             <input type="time" class="form-input" id="fEnd" value="09:00"/></div>
         </div>
-        <div class="controls-row">
+
+        <div class="repeat-section">
+          <label class="form-label" style="margin-bottom:0.5rem;display:block">Повторювати щотижня</label>
+          <div class="weekday-picker">
+            ${["Нд","Пн","Вт","Ср","Чт","Пт","Сб"].map((d,i) => `
+              <label class="weekday-chip">
+                <input type="checkbox" class="weekday-cb" value="${i}"/>
+                <span>${d}</span>
+              </label>`).join("")}
+          </div>
+          <p class="repeat-hint">Якщо нічого не обрано — рутина зберігається лише на цей день</p>
+        </div>
+
+        <div class="controls-row" style="margin-top:1rem">
           <button class="btn btn--green" id="fSave">Зберегти</button>
           <button class="btn btn--gray" id="fCancel">Скасувати</button>
         </div>`;
+
+      document.getElementById("fSave").onclick = async () => {
+        const text = document.getElementById("fText").value.trim();
+        if (!text) return;
+        const startTime = timeToMins(document.getElementById("fStart").value);
+        const endTime   = timeToMins(document.getElementById("fEnd").value);
+
+        const checkedDays = [...document.querySelectorAll(".weekday-cb:checked")].map(cb => parseInt(cb.value));
+
+        if (checkedDays.length > 0) {
+          // Зберігаємо як recurring routine
+          const recs = getRecurringRoutines(userName);
+          recs.push({ id: genId(), text, startTime, endTime, repeatDays: checkedDays });
+          saveRecurringRoutines(userName, recs);
+        } else {
+          // Зберігаємо лише на поточний день
+          const task = { id: genId(), text, type: "routine", startTime, endTime };
+          const key = currentKey();
+          existingTasks.push(task);
+          allTasks[key] = existingTasks;
+          await saveTasksForDay(userName, key, existingTasks);
+        }
+        schedule = [];
+        render();
+      };
+      document.getElementById("fCancel").onclick = () => { area.innerHTML = ""; };
+
     } else {
+      // EVENT
       f.innerHTML = `
         <input class="form-input form-input--full" id="fText" placeholder="Назва події" />
         <div class="form-row">
@@ -276,26 +354,7 @@ function showTaskForm(existingTasks) {
         render();
       };
       document.getElementById("fCancel").onclick = () => { area.innerHTML = ""; };
-      return;
     }
-
-    // Routine save
-    document.getElementById("fSave").onclick = async () => {
-      const text = document.getElementById("fText").value.trim();
-      if (!text) return;
-      const task = {
-        id: genId(), text, type: "routine",
-        startTime: timeToMins(document.getElementById("fStart").value),
-        endTime:   timeToMins(document.getElementById("fEnd").value),
-      };
-      const key = currentKey();
-      existingTasks.push(task);
-      allTasks[key] = existingTasks;
-      await saveTasksForDay(userName, key, existingTasks);
-      schedule = [];
-      render();
-    };
-    document.getElementById("fCancel").onclick = () => { area.innerHTML = ""; };
   }
 }
 
@@ -307,15 +366,22 @@ function renderMonthView(container) {
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
   const offset   = (firstDay + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  const recurring = getRecurringRoutines(userName);
 
   const cells = [];
   for (let i = 0; i < offset; i++) cells.push(`<div class="month-cell--empty"></div>`);
   for (let d = 1; d <= daysInMonth; d++) {
     const key = dayKey(d, currentMonth, currentYear);
-    const tasks = allTasks[key] || [];
-    const chips = tasks.slice(0,3).map(t =>
-      `<div class="month-chip ${t.type==='routine'?'month-chip--routine':'month-chip--event'}">${t.text}</div>`
-    ).join("");
+    const stored = allTasks[key] || [];
+    const dow = new Date(currentYear, currentMonth, d).getDay();
+    const recForDay = recurring.filter(r => r.repeatDays && r.repeatDays.includes(dow));
+    const tasks = [...stored, ...recForDay.filter(r => !stored.some(t => t.routineId === r.id)).map(r => ({
+      id: r.id, routineId: r.id, text: r.text, type: "routine", isRecurring: true
+    }))];
+    const chips = tasks.slice(0,3).map(t => {
+      const bg = t.type === "routine" ? "" : `style="background:${eventColor(t.text)}"`;
+      return `<div class="month-chip ${t.type==='routine'?'month-chip--routine':'month-chip--event'}" ${bg}>${t.text}</div>`;
+    }).join("");
     const more = tasks.length > 3 ? `<div class="month-more">+${tasks.length-3}</div>` : "";
     cells.push(`
       <button class="month-cell" data-day="${d}">

@@ -27,14 +27,33 @@ export function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// Priority colors
+// ---- Кольори подій по імені ----
+const EVENT_COLORS = [
+  "#9CAF88","#6B8E23","#5A7D9A","#4682B4","#6A7BA2",
+  "#4F7C82","#5F9EA0","#8C8FA1","#9A8FBD","#A48CA3",
+  "#8B8589","#D8C3A5","#C2B280","#B66A50","#6D3B47"
+];
+
+// Детермінований хеш рядка → індекс кольору
+function hashString(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return h % EVENT_COLORS.length;
+}
+
+export function eventColor(name) {
+  return EVENT_COLORS[hashString((name || "").toLowerCase().trim())];
+}
+
+// Стара функція (залишаємо для сумісності, але в картках використовуємо eventColor)
 export const PRIORITY_COLORS = ["#ef4444","#f59e0b","#3b82f6","#10b981","#8b5cf6"];
 export function priorityColor(p) {
   return PRIORITY_COLORS[((p || 1) - 1) % PRIORITY_COLORS.length];
 }
 
 // Build sidebar HTML
-// viewMode: "day" | "month" | null (if not on planner page)
 export function buildSidebar(activePage, viewMode = null) {
   const user = getUserName() || "Гість";
   const viewToggle = (activePage === "planner" && viewMode !== null) ? `
@@ -81,6 +100,17 @@ export async function saveTasksForDay(userName, day, tasks) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ user_name: userName, day, tasks }),
   });
+}
+
+// Save recurring routines (stored in localStorage under key "recurring_routines_<userName>")
+export function getRecurringRoutines(userName) {
+  try {
+    return JSON.parse(localStorage.getItem(`recurring_routines_${userName}`) || "[]");
+  } catch { return []; }
+}
+
+export function saveRecurringRoutines(userName, routines) {
+  localStorage.setItem(`recurring_routines_${userName}`, JSON.stringify(routines));
 }
 
 // Generate plan
