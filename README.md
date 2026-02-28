@@ -77,6 +77,9 @@ uvicorn main:app --reload
 
 **Terminal 2 — frontend:**
 ```bash
+cd frontend
+```
+```bash
 python -m http.server 5173
 ```
 
