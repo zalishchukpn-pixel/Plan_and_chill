@@ -68,14 +68,24 @@ Plan_and_chill/
 
 **Термінал 1 — бекенд:**
 ```bash
-   cd Plan_and_chill/backend
+   cd Plan_and_chill
+```
+
+```bash
+   cd backend
 ```
 
 ```bash
 uvicorn main:app --reload
 ```
 
-**Термінал 2 — фронтенд:**
+**Terminal 2 — frontend:**
+```bash
+   cd Plan_and_chill
+```
+```bash
+cd frontend
+```
 ```bash
 python -m http.server 5173
 ```
