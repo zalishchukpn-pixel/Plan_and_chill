@@ -41,10 +41,12 @@ plan-chill/
 
 1. Клонуйте репозиторій:
 
-   ```bash
+```bash
    git clone https://github.com/zalishchukpn-pixel/Plan_and_chill.git
-    ```bash
+```
+```bash
    cd Plan_and_chill
+```
 
 (Рекомендовано) Створіть та активуйте віртуальне середовище:
  ```bash
@@ -65,10 +67,22 @@ plan-chill/
    pip install -r requirements.txt
 ```
 
-4.Запустіть фронтенд (другий термінал, в корені проєкту):
+## Запуск
+
+Відкрий два термінали у папці проекту:
+
+**Термінал 1 — бекенд:**
 ```bash
-   python -m http.server 5173
+cd backend
 ```
+
+```bash
+uvicorn main:app --reload
+```
+
+**Термінал 2 — фронтенд:**
+```bash
+python -m http.server 5173
 
 5.Відкрийте в браузері:
 ```bash
@@ -76,24 +90,7 @@ http://localhost:5173
 ```
 
 
-## Запуск
-
-Відкрий два термінали у папці проекту:
-
-**Термінал 1 — бекенд:**
-```bash
-pip install fastapi uvicorn
-uvicorn main:app --reload
-```
-
-**Термінал 2 — фронтенд:**
-```bash
-python -m http.server 5173
-```
-
 Відкрий браузер: **http://localhost:5173**
-
-> `planner.db` створюється автоматично в папці проекту при першому запуску бекенду.
 
 
 ## База даних
