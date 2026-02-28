@@ -1,5 +1,5 @@
 // ===== utils.js — спільні утиліти =====
-export const API = "http://142.93.107.164:8000";
+export const API = "http://localhost:8000";
 
 export function getUserName() {
   return localStorage.getItem("user_name");

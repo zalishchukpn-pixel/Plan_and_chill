@@ -1,5 +1,5 @@
 // ===== index.js — логіка входу та реєстрації =====
-const API = "http://142.93.107.164:8000";
+const API = "http://localhost:8000";
 
 const nameInput     = document.getElementById("nameInput");
 const emailInput    = document.getElementById("emailInput");
