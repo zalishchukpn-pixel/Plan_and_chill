@@ -32,21 +32,28 @@ function saveColorMap(map) {
 }
 export function eventColor(name) {
   if (!name) return EVENT_COLORS[0];
-  const key = name.toLowerCase().trim();
+
+  const cleanName = name.replace(" (Помодоро)", "").trim().toLowerCase();
   const map = getColorMap();
-  if (map[key]) return map[key];
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  const color = EVENT_COLORS[h % EVENT_COLORS.length];
-  map[key] = color;
+
+  if (map[cleanName]) return map[cleanName];
+
+  const usedColors = Object.values(map);
+  let availableColors = EVENT_COLORS.filter(color => !usedColors.includes(color));
+
+  if (availableColors.length === 0) {
+    availableColors = EVENT_COLORS;
+  }
+
+  const randomIndex = Math.floor(Math.random() * availableColors.length);
+  const chosenColor = availableColors[randomIndex];
+
+  map[cleanName] = chosenColor;
   saveColorMap(map);
-  return color;
+
+  return chosenColor;
 }
 
-export const PRIORITY_COLORS = ["#ef4444","#f59e0b","#3b82f6","#10b981","#8b5cf6"];
-export function priorityColor(p) {
-  return PRIORITY_COLORS[((p || 1) - 1) % PRIORITY_COLORS.length];
-}
 
 // ---- Sidebar ----
 export function buildSidebar(activePage, viewMode = null) {

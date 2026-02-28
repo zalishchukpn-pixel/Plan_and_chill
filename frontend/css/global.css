@@ -154,11 +154,14 @@ input, select, textarea { font-family: var(--font); }
   inset: 0;
   background: rgba(0,0,0,0.5);
   z-index: 199;
-  opacity: 0;
-  transition: opacity 0.25s;
+  opacity: 0; 
+  visibility: hidden;
+  backdrop-filter: blur(3px);
+  transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 .sidebar-overlay--visible {
-  opacity: 1;
+  opacity: 1; 
+  visibility: visible;
 }
 
 /* ---- Мобільний вигляд ---- */
