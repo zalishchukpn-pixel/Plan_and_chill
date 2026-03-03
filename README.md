@@ -2,7 +2,7 @@
 <img width="1889" height="845" alt="image" src="https://github.com/user-attachments/assets/e66fb1cd-bbee-42a8-9b20-c0b644845df6" />
 
 
-Планувальник дня з алгоритмом розстановки задач по помодоро та SQLite базою даних.
+Планувальник дня з алгоритмом розстановки задач по помодоро.
 
 ## Структура проекту
 
@@ -45,16 +45,16 @@ Plan_and_chill/
    cd Plan_and_chill
 ```
 
-(Рекомендовано) Створіть та активуйте віртуальне середовище:
+2.(Рекомендовано) Створіть та активуйте віртуальне середовище:
  ```bash
    python -m venv .venv
 ```
 
-2.Активуйте його:
+Активуйте його:
 ```bash
    # Windows
    .venv\Scripts\activate
-   
+
    # macOS / Linux
    source .venv/bin/activate
 ```
@@ -78,7 +78,7 @@ Plan_and_chill/
 ```
 
 ```bash
-uvicorn main:app --reload
+python -m uvicorn main:app --reload
 ```
 
 **Terminal 2 — frontend:**
@@ -108,8 +108,6 @@ http://localhost:5173
 
 ## Як переглянути базу даних
 
-**Графічно** — [DB Browser for SQLite](https://sqlitebrowser.org) → відкрий `planner.db`
-
 **У терміналі:**
 ```bash
 sqlite3 planner.db
@@ -133,19 +131,9 @@ SELECT * FROM tasks;
 | Поле      | Тип     | Опис                              |
 |-----------|---------|-----------------------------------|
 | id        | TEXT    | ID задачі (PRIMARY KEY)           |
-| user_name | TEXT    | Ім'я користувача (зв'язок з users)|
+| user_email | TEXT    | Email користувача (зв'язок з users)|
 | day       | INTEGER | День місяця (1–31)                |
 | data      | TEXT    | JSON з усіма полями задачі        |
-
-### API ендпоінти
-
-| Метод  | URL                          | Що робить                        |
-|--------|------------------------------|----------------------------------|
-| POST   | `/register`                  | Реєстрація нового користувача    |
-| POST   | `/login`                     | Перевірка email + пароль         |
-| GET    | `/tasks/{user_name}`         | Завантажити всі задачі           |
-| POST   | `/tasks/save`                | Зберегти задачі одного дня       |
-| POST   | `/plan`                      | Згенерувати розклад (алгоритм)   |
 
 
 
