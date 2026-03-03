@@ -1,4 +1,3 @@
-// ===== index.js — логіка входу та реєстрації =====
 const API = "http://localhost:8000";
 
 const nameInput     = document.getElementById("nameInput");
@@ -17,19 +16,29 @@ loginBtn.addEventListener("click", async () => {
   const email    = emailInput.value.trim();
   const password = passwordInput.value.trim();
 
-  if (!name || !email || !password) {
-    showError("Будь ласка, заповніть усі поля.");
+  if (!email || !password) {
+    showError("Будь ласка, заповніть email та пароль.");
     return;
   }
 
-  // Check if email already exists
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+      showError("Впишіть коректний формат email (наприклад: name@gmail.com)");
+      return;
+  }
+
+  if (password.length < 6) {
+      showError("Пароль має бути не менше 6 символів");
+      return;
+  }
+
   try {
-    const checkRes = await fetch(`${API}/check-email/${encodeURIComponent(email)}`);
+    const checkRes = await fetch(API + "/check-email/" + encodeURIComponent(email));
     const checkData = await checkRes.json();
 
     if (checkData.exists) {
       // Login
-      const loginRes = await fetch(`${API}/login`, {
+      const loginRes = await fetch(API + "/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -41,9 +50,14 @@ loginBtn.addEventListener("click", async () => {
       }
       const loginData = await loginRes.json();
       localStorage.setItem("user_name", loginData.name);
+      localStorage.setItem("user_email", email);
+      window.location.href = "planner.html";
     } else {
-      // Register
-      const regRes = await fetch(`${API}/register`, {
+      if (!name) {
+        showError("Будь ласка, введіть імя для реєстрації.");
+        return;
+      }
+      const regRes = await fetch(API + "/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
@@ -55,9 +69,9 @@ loginBtn.addEventListener("click", async () => {
       }
       const regData = await regRes.json();
       localStorage.setItem("user_name", regData.name);
+      localStorage.setItem("user_email", email);
+      window.location.href = "planner.html";
     }
-
-    window.location.href = "planner.html";
   } catch (e) {
     showError("Не вдалося підключитися до сервера. Переконайтесь, що бекенд запущений.");
   }

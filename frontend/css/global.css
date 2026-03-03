@@ -1,4 +1,4 @@
-/* ===== RESET & BASE ===== */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
   --bg-darkest: #2a2a2a; --bg-dark: #3a3a3a; --bg-mid: #4a4a4a;
@@ -88,7 +88,6 @@ input, select, textarea { font-family: var(--font); }
 .login-error { color: var(--red); font-size: 0.875rem; text-align: center; margin-bottom: 0.5rem; }
 .controls-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
 
-/* ---- Weekday repeat picker ---- */
 .repeat-section { margin-bottom: 0.5rem; }
 .weekday-picker { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
 .weekday-chip { display: inline-flex; flex-direction: column; align-items: center; cursor: pointer; }
@@ -111,11 +110,7 @@ input, select, textarea { font-family: var(--font); }
 }
 .repeat-hint { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.25rem; }
 
-/* ============================================================
-   БУРГЕР + МОБІЛЬНИЙ САЙДБАР
-   ============================================================ */
 
-/* Бургер-кнопка — прихована на десктопі */
 .burger-btn {
   display: none;
   position: fixed;
@@ -143,12 +138,10 @@ input, select, textarea { font-family: var(--font); }
   transition: transform 0.25s, opacity 0.25s;
   transform-origin: center;
 }
-/* Анімація в X при відкритому меню */
 .burger-btn--open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .burger-btn--open span:nth-child(2) { opacity: 0; }
 .burger-btn--open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-/* Оверлей */
 .sidebar-overlay {
   display: none;
   position: fixed;
@@ -157,32 +150,28 @@ input, select, textarea { font-family: var(--font); }
   z-index: 199;
   opacity: 0; 
   visibility: hidden;
-  pointer-events: none; /* Дозволяє тикати крізь оверлей */
+  pointer-events: none;
   backdrop-filter: blur(3px);
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 .sidebar-overlay--visible {
-  display: block; /* Гарантуємо відображення */
+  display: block;
   opacity: 1; 
   visibility: visible;
   pointer-events: auto; 
 }
-/* ---- Мобільний вигляд ---- */
 @media (max-width: 640px) {
 
 
   .sidebar__title { 
-    padding-top: 3.5rem !important; /* Цей відступ опускає текст нижче хрестика */
-    text-align: left !important;    /* Гарантує, що текст притиснутий вліво */
+    padding-top: 3.5rem !important;
+    text-align: left !important;
   }
   
-  /* Показуємо бургер */
   .burger-btn { display: flex; }
 
-  /* Показуємо оверлей */
   .sidebar-overlay { display: block; }
 
-  /* Сайдбар ховається за лівий край */
   .sidebar {
     position: fixed;
     top: 0; 
@@ -190,21 +179,18 @@ input, select, textarea { font-family: var(--font); }
     height: 100vh;
     z-index: 200;
     transform: translateX(-100%);
-    /* Використовуємо pointer-events замість visibility, щоб не ламати відображення */
     pointer-events: none; 
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 4px 0 24px rgba(0,0,0,0.4);
   }
   .sidebar--open { 
     transform: translateX(0); 
-    pointer-events: auto; /* Вмикаємо можливість клікати, коли відкритий */
+    pointer-events: auto;
   }
 
-  /* Додатково переконуємось, що контент всередині має колір */
   .sidebar--open * {
     visibility: visible !important;
   }
-  /* ---- App layout ---- */
   .app-layout { flex-direction: column; }
 
   .main-content {
@@ -213,10 +199,10 @@ input, select, textarea { font-family: var(--font); }
     padding: 3.5rem 0.75rem 1.5rem;
     width: 100%;
     overflow-x: hidden;
-    -webkit-overflow-scrolling: touch; /* Плавний скрол для iOS */
+    -webkit-overflow-scrolling: touch;
   }
 
-  /* ---- Навігація по днях ---- */
+
   .day-nav {
     gap: 0.4rem;
     margin-bottom: 1rem;
@@ -231,7 +217,6 @@ input, select, textarea { font-family: var(--font); }
     text-overflow: ellipsis;
   }
 
-  /* ---- Кнопки дій ---- */
   .controls-row {
     flex-direction: column;
     gap: 0.5rem;
@@ -243,7 +228,6 @@ input, select, textarea { font-family: var(--font); }
     padding: 0.65rem 1rem;
   }
 
-  /* ---- Форма задачі ---- */
   .form-card { padding: 1rem; }
   .form-row {
     flex-direction: column;
@@ -251,7 +235,6 @@ input, select, textarea { font-family: var(--font); }
   }
   .tab-group { flex-wrap: wrap; }
 
-  /* ---- Картки задач ---- */
   .task-item {
     flex-direction: column;
     align-items: flex-start;
@@ -263,12 +246,10 @@ input, select, textarea { font-family: var(--font); }
   .task-name { font-size: 0.95rem; }
   .task-meta { font-size: 0.78rem; }
 
-  /* ---- Таймлайн ---- */
   .timeline__block-time { font-size: 0.6rem; }
   .timeline__block-name { font-size: 0.72rem; }
   .timeline__hour-label { font-size: 0.62rem; }
 
-  /* ---- Місячна сітка ---- */
   .month-nav { gap: 0.25rem; flex-wrap: wrap; }
   .month-nav .day-nav__title { font-size: 0.95rem; }
   .month-grid, .month-weekdays { gap: 0.15rem; }
@@ -289,7 +270,6 @@ input, select, textarea { font-family: var(--font); }
   }
   .month-weekday-header { font-size: 0.6rem; }
 
-  /* ---- Налаштування ---- */
   .settings-card {
     width: 100%;
     max-width: 100%;
@@ -308,7 +288,6 @@ input, select, textarea { font-family: var(--font); }
   }
   .settings-reveal-value { flex-wrap: wrap; }
 
-  /* ---- Сторінка логіну ---- */
   .login-card {
     width: 92%;
     padding: 2rem 1.25rem;
@@ -317,7 +296,6 @@ input, select, textarea { font-family: var(--font); }
   .login-title { font-size: 2.75rem; }
   .login-fields { max-width: 100%; }
 
-  /* ---- Weekday picker ---- */
   .weekday-picker { gap: 0.3rem; }
   .weekday-chip span {
     width: 1.9rem; height: 1.9rem;
@@ -325,7 +303,6 @@ input, select, textarea { font-family: var(--font); }
   }
 }
 
-/* Settings page centering (desktop) */
 .settings-main {
   align-items: center;
   justify-content: center;
@@ -338,7 +315,6 @@ input, select, textarea { font-family: var(--font); }
   }
 }
 
-/* ---- Mode toggle (Розклад / Редагувати) ---- */
 .mode-toggle-row {
   display: flex;
   gap: 0.5rem;
@@ -364,7 +340,6 @@ input, select, textarea { font-family: var(--font); }
   color: rgba(255,255,255,0.85);
 }
 
-/* ---- Edit mode top row ---- */
 .edit-top-row {
   display: flex;
   gap: 0.75rem;
@@ -373,7 +348,6 @@ input, select, textarea { font-family: var(--font); }
 }
 .edit-top-row .btn { flex-shrink: 0; }
 
-/* ---- Task list ---- */
 .task-list { display: flex; flex-direction: column; gap: 0.6rem; }
 .task-item {
   display: flex;

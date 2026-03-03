@@ -1,9 +1,9 @@
-// ===== utils.js =====
 export const API = "http://localhost:8000";
 
 export function getUserName() { return localStorage.getItem("user_name"); }
+export function getUserEmail() { return localStorage.getItem("user_email"); }
 export function redirectIfNotLoggedIn() {
-  if (!getUserName()) window.location.href = "index.html";
+  if (!getUserEmail()) window.location.href = "index.html";
 }
 export function minsToTime(mins) {
   const h = Math.floor(mins / 60) % 24, m = mins % 60;
@@ -16,11 +16,9 @@ export function genId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-// ---- Кольори подій по імені ----
 const EVENT_COLORS = [
-  "#62898a", "#8D7B68", "#A4907C", "#87547f", "#7D6E83", // Димчасто-коричневі та лілові
-  "#B09B9B", "#947E7E", "#b57f7f", "#8971a4", "#765D5D", // Глибока пильна троянда
-  "#829481", "#6B7B6A", "#91A398", "#7D8F85", "#5F6F65"  // Приглушена хвоя та шавлія
+  "#529da0", "#d57979", "#9c5b96", "#D4A5A5", "#554263", "#B8A7C6", 
+  "#728C7D", "#A4B494", "#94a9cd", "#636aa2", "#8971a4"
 ];
 
 const COLOR_STORE_KEY = "event_colors_map";
@@ -30,7 +28,7 @@ function getColorMap() {
 function saveColorMap(map) {
   localStorage.setItem(COLOR_STORE_KEY, JSON.stringify(map));
 }
-export function eventColor(name) {
+export function eventColor(name, activeNames = []) {
   if (!name) return EVENT_COLORS[0];
 
   const cleanName = name.replace(" (Помодоро)", "").trim().toLowerCase();
@@ -39,11 +37,33 @@ export function eventColor(name) {
   if (map[cleanName]) return map[cleanName];
 
   const usedColors = Object.values(map);
-  let availableColors = EVENT_COLORS.filter(color => !usedColors.includes(color));
+  const counts = {};
+  EVENT_COLORS.forEach(c => counts[c] = 0);
 
-  if (availableColors.length === 0) {
-    availableColors = EVENT_COLORS;
+  usedColors.forEach(c => {
+    if (counts[c] !== undefined) counts[c]++;
+  });
+
+  // avoid colors used already this day if event not in database
+  if (activeNames && activeNames.length > 0) {
+    activeNames.forEach(activeName => {
+      const cleanActive = activeName.replace(" (Помодоро)", "").trim().toLowerCase();
+      const activeColor = map[cleanActive];
+      if (activeColor && counts[activeColor] !== undefined) {
+        counts[activeColor] += 100;
+      }
+    });
   }
+
+  const minCount = Math.min(...Object.values(counts));
+  let availableColors = EVENT_COLORS.filter(c => counts[c] === minCount);
+
+  if (availableColors.length === EVENT_COLORS.length && usedColors.length > 0) {
+    const lastColor = usedColors[usedColors.length - 1];
+    availableColors = availableColors.filter(c => c !== lastColor);
+  }
+
+  if (availableColors.length === 0) availableColors = EVENT_COLORS;
 
   const randomIndex = Math.floor(Math.random() * availableColors.length);
   const chosenColor = availableColors[randomIndex];
@@ -55,7 +75,7 @@ export function eventColor(name) {
 }
 
 
-// ---- Sidebar ----
+// Sidebar
 export function buildSidebar(activePage, viewMode = null) {
   const user = getUserName() || "Гість";
   const viewToggle = (activePage === "planner" && viewMode !== null) ? `
@@ -107,16 +127,16 @@ export function buildSidebar(activePage, viewMode = null) {
   return html;
 }
 
-// ---- API helpers ----
-export async function fetchAllTasks(userName) {
-  const res = await fetch(`${API}/tasks/${encodeURIComponent(userName)}`);
+// API helpers
+export async function fetchAllTasks(userEmail) {
+  const res = await fetch(`${API}/tasks/${encodeURIComponent(userEmail)}`);
   return res.ok ? res.json() : {};
 }
-export async function saveTasksForDay(userName, day, tasks) {
+export async function saveTasksForDay(userEmail, day, tasks) {
   await fetch(`${API}/tasks/save`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_name: userName, day, tasks }),
+    body: JSON.stringify({ user_email: userEmail, day, tasks }),
   });
 }
 export function getRecurringRoutines(userName) {
@@ -125,11 +145,18 @@ export function getRecurringRoutines(userName) {
 export function saveRecurringRoutines(userName, routines) {
   localStorage.setItem(`recurring_routines_${userName}`, JSON.stringify(routines));
 }
-export async function generatePlan(tasks, pomodoroWork, pomodoroBreak, isToday) {
+export async function generatePlan(tasks, pomodoroWork, pomodoroBreak, pomoCycles, pomoLongBreak, isToday) {
   const res = await fetch(`${API}/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tasks, pomodoro_work: pomodoroWork, pomodoro_break: pomodoroBreak, is_today: isToday }),
+    body: JSON.stringify({ 
+      tasks, 
+      pomodoro_work: pomodoroWork, 
+      pomodoro_break: pomodoroBreak, 
+      pomodoro_cycles: pomoCycles,
+      pomodoro_long_break: pomoLongBreak,
+      is_today: isToday 
+    }),
   });
   return res.ok ? res.json() : { schedule: [] };
 }

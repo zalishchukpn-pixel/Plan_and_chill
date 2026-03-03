@@ -42,7 +42,7 @@ def get_current_time_minutes():
     return now.hour * 60 + now.minute
 
 def algorithm(pomodoro, day: Day, is_today: bool):
-    work, w_break = pomodoro
+    work, w_break, cycles_limit, long_break = pomodoro
     schedule = sorted(day.fixed_schedule, key=lambda x: x.time_start)
     events = sorted(day.priority_queue, key=lambda x: x.priority)
     current_time = get_current_time_minutes() if is_today else 480
@@ -56,6 +56,8 @@ def algorithm(pomodoro, day: Day, is_today: bool):
             "startTime": r.time_start,
             "endTime": r.time_finish
         })
+
+    current_cycle = 0
 
     for ev in events:
         time_left = getattr(ev, 'time_to_spend', 60)
@@ -76,6 +78,7 @@ def algorithm(pomodoro, day: Day, is_today: bool):
                     continue
                 else:
                     break
+
             time_to_work = min(work, time_left)
             result_schedule.append({
                 "id": f"auto-{current_time}",
@@ -85,8 +88,15 @@ def algorithm(pomodoro, day: Day, is_today: bool):
                 "startTime": current_time,
                 "endTime": current_time + time_to_work
             })
+
             time_left -= time_to_work
-            current_time += time_to_work + w_break
+            current_cycle += 1
+
+            if current_cycle >= cycles_limit:
+                current_time += time_to_work + long_break
+                current_cycle = 0
+            else:
+                current_time += time_to_work + w_break
 
     return result_schedule
 

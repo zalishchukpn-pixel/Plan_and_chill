@@ -18,9 +18,9 @@ async def create_plan(request: PlanRequest):
             e.original_time = e.time_to_spend
             current_day.add_event(e)
 
-    pomodoro_tuple = (request.pomodoro_work, request.pomodoro_break)
-    raw_schedule = algorithm(pomodoro_tuple, current_day, request.is_today)
-
+    raw_schedule = algorithm((request.pomodoro_work, request.pomodoro_break,
+                                request.pomodoro_cycles, request.pomodoro_long_break),
+                                current_day, request.is_today)
     final_schedule = []
     for item in raw_schedule:
         item["startTime"] = mins_to_time(item["startTime"])

@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from database import get_db
 from schemas import RegisterRequest, LoginRequest
 import sqlite3
+import bcrypt
 
 router = APIRouter()
 
@@ -9,9 +10,11 @@ router = APIRouter()
 async def register(req: RegisterRequest):
     conn = get_db()
     try:
+        salt = bcrypt.gensalt()
+        hashed = bcrypt.hashpw(req.password.encode('utf-8'), salt).decode('utf-8')
         conn.execute(
             "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-            (req.name, req.email, req.password)
+            (req.name, req.email, hashed)
         )
         conn.commit()
         return {"ok": True, "name": req.name}
@@ -31,22 +34,23 @@ async def check_email(email: str):
 async def login(req: LoginRequest):
     conn = get_db()
     row = conn.execute(
-        "SELECT name FROM users WHERE email = ? AND password = ?",
-        (req.email, req.password)
+        "SELECT name, password FROM users WHERE email = ?",
+        (req.email,)
     ).fetchone()
-    conn.close()
-    if not row:
+    if not row or not bcrypt.checkpw(req.password.encode('utf-8'), row["password"].encode('utf-8')):
+        conn.close()
         raise HTTPException(status_code=401, detail="Невірний пароль або email")
+    conn.close()
     return {"ok": True, "name": row["name"]}
 
 @router.get("/user-info/{user_name}")
 async def user_info(user_name: str):
     conn = get_db()
     row = conn.execute(
-        "SELECT email, password FROM users WHERE name = ?",
+        "SELECT email FROM users WHERE name = ?",
         (user_name,)
     ).fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=404, detail="Користувача не знайдено")
-    return {"email": row["email"], "password": row["password"]}
+    return {"email": row["email"]}

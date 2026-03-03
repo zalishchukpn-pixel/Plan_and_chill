@@ -16,11 +16,11 @@ def init_db():
 
         CREATE TABLE IF NOT EXISTS tasks (
             id         TEXT NOT NULL,
-            user_name  TEXT NOT NULL,
+            user_email TEXT NOT NULL,
             day        TEXT NOT NULL,
             data       TEXT NOT NULL,
-            PRIMARY KEY (id, user_name),
-            FOREIGN KEY (user_name) REFERENCES users(name)
+            PRIMARY KEY (id, user_email),
+            FOREIGN KEY (user_email) REFERENCES users(email)
         );
     """)
     conn.commit()

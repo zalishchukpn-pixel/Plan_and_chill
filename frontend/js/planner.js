@@ -1,6 +1,5 @@
-// ===== planner.js =====
 import {
-  redirectIfNotLoggedIn, getUserName, buildSidebar,
+  redirectIfNotLoggedIn, getUserName, getUserEmail, buildSidebar,
   fetchAllTasks, saveTasksForDay, generatePlan,
   genId, eventColor, minsToTime, timeToMins,
   getRecurringRoutines, saveRecurringRoutines
@@ -9,6 +8,7 @@ import {
 redirectIfNotLoggedIn();
 
 const userName = getUserName();
+const userEmail = getUserEmail();
 const app = document.getElementById("app");
 
 let allTasks = {};
@@ -20,6 +20,8 @@ let dayMode = "schedule";   // "schedule" | "edit"
 let schedule = [];
 let pomodoroWork  = parseInt(localStorage.getItem("pomo_work")  || "25");
 let pomodoroBreak = parseInt(localStorage.getItem("pomo_break") || "5");
+let pomodoroCycles = parseInt(localStorage.getItem("pomo_cycles") || "4");
+let pomodoroLongBreak = parseInt(localStorage.getItem("pomo_long_break") || "15");
 
 function dayKey(day, month, year) {
   return `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
@@ -42,18 +44,18 @@ async function regenerateSchedule() {
   if (!tasks.length) { schedule = []; return; }
   const today = new Date();
   const isToday = currentDay===today.getDate() && currentMonth===today.getMonth() && currentYear===today.getFullYear();
-  const res = await generatePlan(tasks, pomodoroWork, pomodoroBreak, isToday);
+  
+  // Передаємо нові змінні у виклик функції
+  const res = await generatePlan(tasks, pomodoroWork, pomodoroBreak, pomodoroCycles, pomodoroLongBreak, isToday);
   schedule = res.schedule || [];
 }
 
-// ---- Bootstrap ----
 (async () => {
-  allTasks = await fetchAllTasks(userName);
+  allTasks = await fetchAllTasks(userEmail);
   await regenerateSchedule();
   render();
 })();
 
-// ---- Render ----
 function render() {
   app.innerHTML = buildSidebar("planner", viewMode) + `<div class="main-content" id="mainContent"></div>`;
   document.getElementById("sidebarDayBtn")?.addEventListener("click", () => { viewMode="day"; render(); });
@@ -61,9 +63,6 @@ function render() {
   viewMode === "day" ? renderDayView(document.getElementById("mainContent")) : renderMonthView(document.getElementById("mainContent"));
 }
 
-// ============================================================
-// DAY VIEW
-// ============================================================
 function renderDayView(container) {
   container.innerHTML = `
     <div class="day-nav">
@@ -101,7 +100,6 @@ function renderDayContent() {
   dayMode === "schedule" ? renderScheduleMode(container) : renderEditMode(container);
 }
 
-// ---- РОЗКЛАД ----
 function renderScheduleMode(container) {
   if (!schedule.length) {
     container.innerHTML = `<p class="empty-state">Немає розкладу. Перейди в <strong>Редагувати</strong> щоб додати події.</p>`;
@@ -110,7 +108,6 @@ function renderScheduleMode(container) {
   container.innerHTML = renderTimeline(schedule);
 }
 
-// ---- РЕДАГУВАТИ ----
 function renderEditMode(container) {
   const tasks = getTasksForCurrentDay();
   container.innerHTML = `
@@ -132,7 +129,7 @@ function renderEditMode(container) {
       } else {
         const key = currentKey();
         allTasks[key] = (allTasks[key] || []).filter(t => t.id !== id);
-        await saveTasksForDay(userName, key, allTasks[key]);
+        await saveTasksForDay(userEmail, key, allTasks[key]);
       }
       await regenerateSchedule();
       renderEditMode(document.getElementById("dayContent"));
@@ -142,12 +139,13 @@ function renderEditMode(container) {
 
 function renderTaskList(tasks) {
   if (!tasks.length) return `<p class="empty-state">Немає задач. Натисни "+ Додати".</p>`;
-  return `<div class="task-list">${tasks.map(taskCard).join("")}</div>`;
+  const activeNames = tasks.map(t => t.text);
+return `<div class="task-list">${tasks.map(t => taskCard(t, activeNames)).join("")}</div>`;
 }
 
-function taskCard(t) {
-  const bg  = t.type === "routine" ? "#6b7280" : eventColor(t.text);
-  const clr = "#fff"; // ПРИМУСОВО БІЛИЙ для всіх карток
+function taskCard(t, activeNames = []) {
+  const bg  = t.type === "routine" ? "#6b7280" : eventColor(t.text, activeNames);
+  const clr = "#fff";
   const meta = t.type === "routine"
     ? `${minsToTime(t.startTime||0)} — ${minsToTime(t.endTime||0)}${t.isRecurring?" · щотижня":""}`
     : `${t.duration||60} хв · пріоритет ${t.priority||3}`;
@@ -168,14 +166,16 @@ function taskCard(t) {
     </div>`;
 }
 
-// ---- Timeline ----
 function renderTimeline(sched) {
+  const activeNames = sched.map(item => item.text);
+  
   const items = sched.map(item => ({
     ...item,
     startMins: timeToMins(item.startTime),
     endMins:   timeToMins(item.endTime),
     col: 0, totalCols: 1,
   }));
+
   for (let i = 0; i < items.length; i++) {
     const used = new Set();
     for (let j = 0; j < i; j++)
@@ -190,10 +190,9 @@ function renderTimeline(sched) {
     items[i].totalCols = max + 1;
   }
   const LW = 48;
-  // Знайти в planner.js всередині функції renderTimeline блок items.map
 const blocks = items.map(item => {
     const top    = item.startMins;
-    const height = (item.endMins - item.startMins) - 1; // Віднімаємо 1px для мікро-зазору
+    const height = (item.endMins - item.startMins) - 1;
     const bg     = item.type === "routine" ? "#6b7280" : eventColor(item.text);
     const clr    = item.type === "routine" ? "#fff" : "#1a1a1a";
     const w      = `calc((100% - ${LW}px) / ${item.totalCols})`;
@@ -216,7 +215,6 @@ const blocks = items.map(item => {
   return `<div class="timeline" style="height:1440px;position:relative">${hours}${blocks}</div>`;
 }
 
-// ---- Форма додавання ----
 function showTaskForm(existingTasks) {
   const area = document.getElementById("taskFormArea");
   area.innerHTML = `
@@ -265,7 +263,7 @@ function showTaskForm(existingTasks) {
           const key = currentKey();
           existingTasks.push({ id: genId(), text, type: "routine", startTime, endTime });
           allTasks[key] = existingTasks;
-          await saveTasksForDay(userName, key, existingTasks);
+          await saveTasksForDay(userEmail, key, existingTasks);
         }
         await regenerateSchedule();
         renderEditMode(document.getElementById("dayContent"));
@@ -314,7 +312,7 @@ function showTaskForm(existingTasks) {
         const key = currentKey();
         existingTasks.push(task);
         allTasks[key] = existingTasks;
-        await saveTasksForDay(userName, key, existingTasks);
+        await saveTasksForDay(userEmail, key, existingTasks);
         await regenerateSchedule();
         renderEditMode(document.getElementById("dayContent"));
       };
@@ -323,9 +321,6 @@ function showTaskForm(existingTasks) {
   }
 }
 
-// ============================================================
-// MONTH VIEW
-// ============================================================
 function renderMonthView(container) {
   const weekdays = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const firstDay = new Date(currentYear, currentMonth, 1).getDay();
@@ -343,8 +338,9 @@ function renderMonthView(container) {
       .filter(r => r.repeatDays?.includes(dow) && !stored.some(t => t.routineId===r.id))
       .map(r => ({ text: r.text, type: "routine" }));
     const tasks = [...stored, ...recForDay];
+    const activeNames = tasks.map(t => t.text);
     const chips = tasks.slice(0,3).map(t => {
-      const bg  = t.type==="routine" ? "#6b7280" : eventColor(t.text);
+      const bg  = t.type==="routine" ? "#6b7280" : eventColor(t.text, activeNames);
       const clr = t.type==="routine" ? "#fff" : "#1a1a1a";
       return `<div class="month-chip" style="background:${bg};color:${clr}">${t.text}</div>`;
     }).join("");

@@ -5,12 +5,12 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
-@router.get("/tasks/{user_name}")
-async def get_all_tasks(user_name: str):
+@router.get("/tasks/{user_email}")
+async def get_all_tasks(user_email: str):
     conn = get_db()
     rows = conn.execute(
-        "SELECT day, data FROM tasks WHERE user_name = ?",
-        (user_name,)
+        "SELECT day, data FROM tasks WHERE user_email = ?",
+        (user_email,)
     ).fetchall()
     conn.close()
 
@@ -28,13 +28,13 @@ async def get_all_tasks(user_name: str):
 async def save_tasks(req: SaveTasksRequest):
     conn = get_db()
     conn.execute(
-        "DELETE FROM tasks WHERE user_name = ? AND day = ?",
-        (req.user_name, req.day)
+        "DELETE FROM tasks WHERE user_email = ? AND day = ?",
+        (req.user_email, req.day)
     )
     for task in req.tasks:
         conn.execute(
-            "INSERT INTO tasks (id, user_name, day, data) VALUES (?, ?, ?, ?)",
-            (task["id"], req.user_name, req.day, json.dumps(task))
+            "INSERT INTO tasks (id, user_email, day, data) VALUES (?, ?, ?, ?)",
+            (task["id"], req.user_email, req.day, json.dumps(task))
         )
     conn.commit()
     conn.close()
