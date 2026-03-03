@@ -1,4 +1,6 @@
 # Plan & Chill
+<img width="1889" height="845" alt="image" src="https://github.com/user-attachments/assets/e66fb1cd-bbee-42a8-9b20-c0b644845df6" />
+
 
 Планувальник дня з алгоритмом розстановки задач по помодоро та SQLite базою даних.
 
